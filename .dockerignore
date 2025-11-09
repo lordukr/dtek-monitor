@@ -1,0 +1,42 @@
+# Node modules (will be installed in container)
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Claude files
+.claude/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore

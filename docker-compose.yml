@@ -1,0 +1,42 @@
+# version: '3.8'
+
+services:
+  # Main monitoring service
+  monitor:
+    build: .
+    container_name: dtek-monitor
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - CITY=${CITY}
+      - STREET=${STREET}
+      - HOUSE=${HOUSE}
+    volumes:
+      # Persist artifacts between runs
+      - ./artifacts:/app/artifacts
+    # Override default command - we'll use the scheduler service instead
+    command: tail -f /dev/null
+    networks:
+      - dtek-network
+
+  # Scheduler service that runs monitor every 10 minutes
+  scheduler:
+    image: mcbridematt/crond:latest
+    container_name: dtek-scheduler
+    restart: unless-stopped
+    volumes:
+      # Mount docker socket to allow scheduler to execute commands in monitor container
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Run monitor every 10 minutes
+      # Format: minute hour day month weekday command
+      - CRON_SCHEDULE=*/10 * * * * docker exec dtek-monitor node monitor.js
+    depends_on:
+      - monitor
+    networks:
+      - dtek-network
+
+networks:
+  dtek-network:
+    driver: bridge
