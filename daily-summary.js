@@ -92,10 +92,18 @@ async function getInfo() {
 
 function checkPlannedOutages(info) {
   console.log("🌀 Checking planned outages for today...")
+  console.log("🔍 Info object structure check:")
+  console.log(`   - info exists: ${!!info}`)
+  console.log(`   - info.data exists: ${!!info?.data}`)
+  console.log(`   - info.preset exists: ${!!info?.preset}`)
+  console.log(`   - info.fact exists: ${!!info?.fact}`)
 
   if (!info?.data) {
     throw Error("❌ Power outage info missed.")
   }
+
+  console.log(`🏠 Looking for house number: "${HOUSE}"`)
+  console.log(`📋 Available houses in data:`, Object.keys(info.data || {}))
 
   const houseData = info?.data?.[HOUSE]
   console.log("📊 House data:", JSON.stringify(houseData, null, 2))
@@ -525,7 +533,16 @@ async function run() {
 
   try {
     const info = await getInfo()
-    const outageData = checkPlannedOutages(info)
+
+    let outageData
+    try {
+      outageData = checkPlannedOutages(info)
+    } catch (error) {
+      console.error("❌ Error in checkPlannedOutages:", error)
+      console.error("Stack trace:", error.stack)
+      throw error
+    }
+
     await sendDailySummary(info, outageData)
 
     console.log("")

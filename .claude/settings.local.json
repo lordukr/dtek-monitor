@@ -12,7 +12,8 @@
       "Bash(brew:*)",
       "Bash(/opt/homebrew/bin/node:*)",
       "Bash(npm test:*)",
-      "Bash(node test-timezone.js:*)"
+      "Bash(node test-timezone.js:*)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []
