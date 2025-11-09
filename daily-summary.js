@@ -62,9 +62,20 @@ function checkPlannedOutages(info) {
     throw Error("❌ Power outage info missed.")
   }
 
-  const { sub_type, start_date, end_date, type } = info?.data?.[HOUSE] || {}
+  const houseData = info?.data?.[HOUSE]
+  console.log("📊 House data:", JSON.stringify(houseData, null, 2))
+
+  const { sub_type, start_date, end_date, type } = houseData || {}
+
+  // Check if any field has a non-empty value
   const hasOutageInfo =
-    sub_type !== "" || start_date !== "" || end_date !== "" || type !== ""
+    (sub_type && sub_type !== "") ||
+    (start_date && start_date !== "") ||
+    (end_date && end_date !== "") ||
+    (type && type !== "")
+
+  console.log("🔍 Outage fields:", { sub_type, start_date, end_date, type })
+  console.log("🎯 Has outage info:", hasOutageInfo)
 
   if (hasOutageInfo) {
     console.log("📋 Planned outage information found!")
