@@ -3,7 +3,15 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(docker-compose up:*)",
-      "Bash(node daily-summary.js:*)"
+      "Bash(node daily-summary.js:*)",
+      "Bash(cat:*)",
+      "Bash(test:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm use)",
+      "Bash(node --version:*)",
+      "Bash(brew:*)",
+      "Bash(/opt/homebrew/bin/node:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []
