@@ -141,17 +141,66 @@ function checkPlannedOutages(info) {
   const queueGroup = sub_type_reason[0] // e.g., "GPV1.2"
   console.log(`🔢 House queue group: ${queueGroup}`)
 
-  // Get today's timestamp
-  const todayTimestamp = info.fact?.today
-  console.log(`📆 Today's timestamp: ${todayTimestamp}`)
+  // Calculate today's timestamp - convert current date to Unix timestamp (start of day in Kyiv timezone)
+  // This is critical because GitHub Actions runs in UTC, but we need Kyiv time
+  // Example: 23:00 UTC on Nov 9 = 01:00 on Nov 10 in Kyiv (UTC+2), so we need Nov 10's data
+  const now = new Date()
 
-  if (!todayTimestamp) {
-    console.log("⚠️ No today timestamp in data")
-    return { hasOutage: false }
+  // Get the date components in Kyiv timezone using Intl.DateTimeFormat
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+  const parts = formatter.formatToParts(now)
+  const year = parseInt(parts.find((p) => p.type === "year").value)
+  const month = parseInt(parts.find((p) => p.type === "month").value) - 1 // JS months are 0-indexed
+  const day = parseInt(parts.find((p) => p.type === "day").value)
+
+  // Create date for start of day in UTC, then adjust for Kyiv timezone
+  // Kyiv is UTC+2 in winter, UTC+3 in summer
+  const startOfDayUTC = Date.UTC(year, month, day, 0, 0, 0, 0)
+
+  // Get the offset between UTC and Kyiv for this date
+  const tempDate = new Date(startOfDayUTC)
+  const kyivOffset = new Date(
+    tempDate.toLocaleString("en-US", { timeZone: "Europe/Kyiv" })
+  ).getTime()
+  const utcTime = new Date(
+    tempDate.toLocaleString("en-US", { timeZone: "UTC" })
+  ).getTime()
+  const offset = utcTime - kyivOffset
+
+  // Apply offset to get the correct timestamp for start of day in Kyiv
+  const todayTimestamp = Math.floor((startOfDayUTC + offset) / 1000)
+
+  console.log(`📆 API's today timestamp: ${info.fact?.today}`)
+  console.log(
+    `   (API date: ${new Date(info.fact?.today * 1000).toLocaleDateString("uk-UA")})`
+  )
+  console.log(`📆 Calculated today's timestamp: ${todayTimestamp}`)
+  console.log(
+    `   (Calculated date: ${new Date(todayTimestamp * 1000).toLocaleDateString("uk-UA")})`
+  )
+  console.log(`📆 Current Kyiv date: ${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`)
+
+  // Log all available timestamps in fact.data to help debug
+  if (info.fact?.data) {
+    console.log(
+      "📋 Available timestamps in fact.data:",
+      Object.keys(info.fact.data)
+    )
   }
 
-  // Get schedule for today
-  const todaySchedule = info.fact?.data?.[todayTimestamp]?.[queueGroup]
+  // Try to get schedule for today using calculated timestamp
+  let todaySchedule = info.fact?.data?.[todayTimestamp]?.[queueGroup]
+
+  // If not found with calculated timestamp, try API's timestamp as fallback
+  if (!todaySchedule && info.fact?.today) {
+    console.log("⚠️ Schedule not found with calculated timestamp, trying API timestamp...")
+    todaySchedule = info.fact?.data?.[info.fact.today]?.[queueGroup]
+  }
   console.log(
     `📋 Today's schedule for ${queueGroup}:`,
     JSON.stringify(todaySchedule, null, 2)
