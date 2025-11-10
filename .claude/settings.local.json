@@ -14,7 +14,9 @@
       "Bash(npm test:*)",
       "Bash(node test-timezone.js:*)",
       "Bash(node -e:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(node monitor.js:*)",
+      "Bash(node test-outage-display.js:*)"
     ],
     "deny": [],
     "ask": []
