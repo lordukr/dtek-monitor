@@ -126,11 +126,10 @@ function checkPlannedOutages(info) {
     (end_date && end_date !== "") ||
     (type && type !== "")
 
+  let emergencyOutage = null
   if (hasEmergencyOutage) {
     console.log("🚨 Emergency/Active outage detected!")
-    return {
-      hasOutage: true,
-      isEmergency: true,
+    emergencyOutage = {
       sub_type,
       start_date,
       end_date,
@@ -138,11 +137,19 @@ function checkPlannedOutages(info) {
     }
   }
 
-  // Check for scheduled outages in preset/fact data
+  // Check for scheduled outages in preset/fact data (always check, even if emergency exists)
   console.log("📅 Checking schedule data...")
 
   if (!info.preset?.data || !info.fact?.data || !sub_type_reason) {
     console.log("⚠️ No schedule data available")
+    // Return emergency outage if exists, otherwise no outage
+    if (emergencyOutage) {
+      return {
+        hasOutage: true,
+        emergencyOutage,
+        scheduledOutage: null,
+      }
+    }
     return { hasOutage: false }
   }
 
@@ -192,6 +199,14 @@ function checkPlannedOutages(info) {
 
   if (!todaySchedule) {
     console.log(`⚠️ No schedule found for queue ${queueGroup}`)
+    // Return emergency outage if exists, otherwise no outage
+    if (emergencyOutage) {
+      return {
+        hasOutage: true,
+        emergencyOutage,
+        scheduledOutage: null,
+      }
+    }
     return { hasOutage: false }
   }
 
@@ -229,7 +244,7 @@ function checkPlannedOutages(info) {
     console.log("📝 Outage periods:", outageSlots)
 
     // Group consecutive slots
-    // BUT: "first" and "second" statuses should NOT be combined with adjacent "no" or "maybe" slots
+    // Only split when there's a time gap (e.g., "first" ends at :30 but next slot starts at :00)
     const periods = []
     let currentPeriod = null
 
@@ -240,13 +255,15 @@ function checkPlannedOutages(info) {
         const lastSlot = currentPeriod.slots[currentPeriod.slots.length - 1]
 
         // Check if we should split the period:
-        // - If last slot was "first", don't combine with next slot
-        // - If last slot was "second", don't combine with next slot
-        // - If current slot is "second", don't combine with previous period
-        const shouldSplit =
-          lastSlot.status === "first" ||
-          lastSlot.status === "second" ||
-          slot.status === "second"
+        // Only split if there's an actual time gap between periods
+        // - If last slot was "first" (ends at XX:30) AND current slot is NOT "second" (starts at XX:00), split
+        // - If last slot was "first" (ends at XX:30) AND current slot IS "second" (starts at XX:30), DON'T split - they're continuous!
+        const lastSlotEndsAtHalf = lastSlot.status === "first"
+        const currentSlotStartsAtHalf = slot.status === "second"
+
+        // Split only if last slot ended at :30 but current doesn't start at :30
+        // This creates a gap from XX:30 to XX:00 (next hour)
+        const shouldSplit = lastSlotEndsAtHalf && !currentSlotStartsAtHalf
 
         if (shouldSplit) {
           periods.push(currentPeriod)
@@ -288,17 +305,30 @@ function checkPlannedOutages(info) {
       console.log(`   Period ${i + 1}: ${startTime} - ${endTime}`)
     })
 
-    return {
-      hasOutage: true,
-      isEmergency: false,
+    const scheduledOutage = {
       queueGroup,
       outageSlots,
       periods,
       scheduleDescription: formatScheduleDescription(periods, timeZones),
     }
+
+    // Return both emergency and scheduled outages
+    return {
+      hasOutage: true,
+      emergencyOutage,
+      scheduledOutage,
+    }
   }
 
   console.log("✅ No planned outages for today!")
+  // Return emergency outage if exists, otherwise no outage
+  if (emergencyOutage) {
+    return {
+      hasOutage: true,
+      emergencyOutage,
+      scheduledOutage: null,
+    }
+  }
   return { hasOutage: false }
 }
 
@@ -377,12 +407,13 @@ async function sendDailySummary(info, outageData) {
   if (outageData.hasOutage) {
     console.log("📝 Creating message for OUTAGE DETECTED")
 
-    if (outageData.isEmergency) {
-      // Emergency outage with specific times
-      const { sub_type, start_date, end_date } = outageData
-      text = [
-        "🌅 <b>Доброго ранку!</b>",
-        "",
+    const { emergencyOutage, scheduledOutage } = outageData
+    const messageParts = ["🌅 <b>Доброго ранку!</b>", ""]
+
+    // Add emergency outage section if exists
+    if (emergencyOutage) {
+      const { sub_type, start_date, end_date } = emergencyOutage
+      messageParts.push(
         "🚨 <b>УВАГА! Аварійне відключення!</b>",
         "",
         "ℹ️ <b>Причина:</b>",
@@ -392,14 +423,18 @@ async function sendDailySummary(info, outageData) {
         start_date || "Невідомий",
         "",
         "🟢 <b>Час відновлення:</b>",
-        end_date || "Невідомий",
-        "",
-        "⏰ <b>Час формування повідомлення:</b>",
-        timestamp,
-      ].join("\n")
-    } else {
-      // Scheduled outage with time periods
-      const { scheduleDescription, queueGroup, periods } = outageData
+        end_date || "Невідомий"
+      )
+
+      // Add separator if we also have scheduled outages
+      if (scheduledOutage) {
+        messageParts.push("", "━━━━━━━━━━━━━━━━━━━━")
+      }
+    }
+
+    // Add scheduled outage section if exists
+    if (scheduledOutage) {
+      const { queueGroup, periods } = scheduledOutage
       const periodDetails = periods
         .map((period) => {
           let startTime =
@@ -430,10 +465,9 @@ async function sendDailySummary(info, outageData) {
         })
         .join("\n")
 
-      text = [
-        "🌅 <b>Доброго ранку!</b>",
+      messageParts.push(
         "",
-        "⚠️ <b>На сьогодні заплановані відключення</b>",
+        "⚠️ <b>Заплановані відключення на сьогодні</b>",
         "",
         "📊 <b>Черга:</b>",
         queueGroup,
@@ -442,12 +476,17 @@ async function sendDailySummary(info, outageData) {
         periodDetails,
         "",
         "💡 <b>Порада:</b>",
-        "Зарядіть пристрої та підготуйтеся заздалегідь",
-        "",
-        "⏰ <b>Час формування повідомлення:</b>",
-        timestamp,
-      ].join("\n")
+        "Зарядіть пристрої та підготуйтеся заздалегідь"
+      )
     }
+
+    messageParts.push(
+      "",
+      "⏰ <b>Час формування повідомлення:</b>",
+      timestamp
+    )
+
+    text = messageParts.join("\n")
   } else {
     console.log("📝 Creating message for NO OUTAGES")
     text = [

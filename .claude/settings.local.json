@@ -13,7 +13,8 @@
       "Bash(/opt/homebrew/bin/node:*)",
       "Bash(npm test:*)",
       "Bash(node test-timezone.js:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

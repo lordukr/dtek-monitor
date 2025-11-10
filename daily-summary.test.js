@@ -195,10 +195,10 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    assert.strictEqual(result.isEmergency, false)
-    assert.strictEqual(result.queueGroup, "GPV1.2")
-    assert.strictEqual(result.outageSlots.length, 3)
-    assert.strictEqual(result.periods.length, 1)
+    assert.strictEqual(result.emergencyOutage, null)
+    assert.strictEqual(result.scheduledOutage.queueGroup, "GPV1.2")
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 3)
+    assert.strictEqual(result.scheduledOutage.periods.length, 1)
   })
 
   it("should detect outages with 'second' status", () => {
@@ -210,8 +210,8 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    assert.strictEqual(result.outageSlots.length, 1)
-    assert.strictEqual(result.outageSlots[0].status, "second")
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 1)
+    assert.strictEqual(result.scheduledOutage.outageSlots[0].status, "second")
   })
 
   it("should detect outages with 'first' status", () => {
@@ -223,8 +223,8 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    assert.strictEqual(result.outageSlots.length, 1)
-    assert.strictEqual(result.outageSlots[0].status, "first")
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 1)
+    assert.strictEqual(result.scheduledOutage.outageSlots[0].status, "first")
   })
 
   it("should group consecutive outage hours", () => {
@@ -235,9 +235,9 @@ describe("checkPlannedOutages", () => {
     const info = createMockInfo(schedule)
     const result = checkPlannedOutages(info)
 
-    assert.strictEqual(result.periods.length, 1)
-    assert.strictEqual(result.periods[0].start, 2)
-    assert.strictEqual(result.periods[0].end, 4)
+    assert.strictEqual(result.scheduledOutage.periods.length, 1)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 2)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 4)
   })
 
   it("should create separate periods for non-consecutive outages", () => {
@@ -249,13 +249,13 @@ describe("checkPlannedOutages", () => {
     const info = createMockInfo(schedule)
     const result = checkPlannedOutages(info)
 
-    assert.strictEqual(result.periods.length, 3)
-    assert.strictEqual(result.periods[0].start, 2)
-    assert.strictEqual(result.periods[0].end, 3)
-    assert.strictEqual(result.periods[1].start, 12)
-    assert.strictEqual(result.periods[1].end, 12)
-    assert.strictEqual(result.periods[2].start, 18)
-    assert.strictEqual(result.periods[2].end, 18)
+    assert.strictEqual(result.scheduledOutage.periods.length, 3)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 2)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 3)
+    assert.strictEqual(result.scheduledOutage.periods[1].start, 12)
+    assert.strictEqual(result.scheduledOutage.periods[1].end, 12)
+    assert.strictEqual(result.scheduledOutage.periods[2].start, 18)
+    assert.strictEqual(result.scheduledOutage.periods[2].end, 18)
   })
 
   it("should handle complex real-world schedule", () => {
@@ -289,10 +289,13 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    // With new logic: hour 1 "second" is separate, hours 2-4 combined
-    // hour 22 "second" is separate, hours 23-24 combined
-    assert.strictEqual(result.periods.length, 6)
-    assert.strictEqual(result.scheduleDescription, "00:30-01:00, 01:00-04:00, 11:00-12:00, 17:00-18:00, 21:30-22:00, 22:00-24:00")
+    // With new logic: consecutive periods are combined
+    // Period 1: hours 1-4 (00:30-04:00) - "second" at hour 1 flows into "no" at hours 2-4
+    // Period 2: hour 12 (11:00-12:00)
+    // Period 3: hour 18 (17:00-18:00)
+    // Period 4: hours 22-24 (21:30-24:00) - "second" at hour 22 flows into "no" at hours 23-24
+    assert.strictEqual(result.scheduledOutage.periods.length, 4)
+    assert.strictEqual(result.scheduledOutage.scheduleDescription, "00:30-04:00, 11:00-12:00, 17:00-18:00, 21:30-24:00")
   })
 
   it("should detect emergency outage when sub_type is filled", () => {
@@ -304,10 +307,10 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    assert.strictEqual(result.isEmergency, true)
-    assert.strictEqual(result.sub_type, "Аварійне відключення")
-    assert.strictEqual(result.start_date, "09.11.2025 10:00")
-    assert.strictEqual(result.end_date, "09.11.2025 14:00")
+    assert.strictEqual(result.emergencyOutage.sub_type, "Аварійне відключення")
+    assert.strictEqual(result.emergencyOutage.start_date, "09.11.2025 10:00")
+    assert.strictEqual(result.emergencyOutage.end_date, "09.11.2025 14:00")
+    assert.strictEqual(result.scheduledOutage, null)
   })
 
   it("should handle missing schedule data gracefully", () => {
@@ -342,11 +345,11 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     assert.strictEqual(result.hasOutage, true)
-    assert.strictEqual(result.outageSlots.length, 1)
-    assert.strictEqual(result.outageSlots[0].status, "maybe")
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 1)
+    assert.strictEqual(result.scheduledOutage.outageSlots[0].status, "maybe")
   })
 
-  it("should NOT combine 'second' status with following 'no' status", () => {
+  it("should combine 'second' status with following 'no' status when continuous", () => {
     const schedule = {}
     for (let i = 1; i <= 24; i++) {
       schedule[i.toString()] = i === 22 || i === 23 ? (i === 22 ? "second" : "no") : "yes"
@@ -354,13 +357,14 @@ describe("checkPlannedOutages", () => {
     const info = createMockInfo(schedule)
     const result = checkPlannedOutages(info)
 
-    // Should have 2 separate periods, not 1 combined period
-    assert.strictEqual(result.periods.length, 2)
-    assert.strictEqual(result.periods[0].start, 22)
-    assert.strictEqual(result.periods[0].end, 22)
-    assert.strictEqual(result.periods[1].start, 23)
-    assert.strictEqual(result.periods[1].end, 23)
-    assert.strictEqual(result.scheduleDescription, "21:30-22:00, 22:00-23:00")
+    // Should have 1 combined period since they're continuous (22:00 meets 22:00)
+    // Hour 22 "second" = 21:30-22:00
+    // Hour 23 "no" = 22:00-23:00
+    // Combined: 21:30-23:00
+    assert.strictEqual(result.scheduledOutage.periods.length, 1)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 22)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 23)
+    assert.strictEqual(result.scheduledOutage.scheduleDescription, "21:30-23:00")
   })
 
   it("should NOT combine 'first' status with following slot", () => {
@@ -372,12 +376,12 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     // Should have 2 separate periods
-    assert.strictEqual(result.periods.length, 2)
-    assert.strictEqual(result.periods[0].start, 12)
-    assert.strictEqual(result.periods[0].end, 12)
-    assert.strictEqual(result.periods[1].start, 13)
-    assert.strictEqual(result.periods[1].end, 13)
-    assert.strictEqual(result.scheduleDescription, "11:00-11:30, 12:00-13:00")
+    assert.strictEqual(result.scheduledOutage.periods.length, 2)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 12)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 12)
+    assert.strictEqual(result.scheduledOutage.periods[1].start, 13)
+    assert.strictEqual(result.scheduledOutage.periods[1].end, 13)
+    assert.strictEqual(result.scheduledOutage.scheduleDescription, "11:00-11:30, 12:00-13:00")
   })
 
   it("should handle consecutive 'no' slots without splitting", () => {
@@ -389,10 +393,40 @@ describe("checkPlannedOutages", () => {
     const result = checkPlannedOutages(info)
 
     // Should be 1 combined period
-    assert.strictEqual(result.periods.length, 1)
-    assert.strictEqual(result.periods[0].start, 10)
-    assert.strictEqual(result.periods[0].end, 12)
-    assert.strictEqual(result.scheduleDescription, "09:00-12:00")
+    assert.strictEqual(result.scheduledOutage.periods.length, 1)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 10)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 12)
+    assert.strictEqual(result.scheduledOutage.scheduleDescription, "09:00-12:00")
+  })
+
+  it("should detect BOTH emergency and scheduled outages together", () => {
+    const schedule = {}
+    for (let i = 1; i <= 24; i++) {
+      schedule[i.toString()] = i >= 2 && i <= 4 ? "no" : "yes"
+    }
+    const info = createMockInfo(schedule)
+    // Add emergency outage
+    info.data["1"].sub_type = "Стабілізаційне відключення"
+    info.data["1"].start_date = "10.11.2025 18:41"
+    info.data["1"].end_date = "10.11.2025 22:00"
+
+    const result = checkPlannedOutages(info)
+
+    // Should detect both outages
+    assert.strictEqual(result.hasOutage, true)
+
+    // Verify emergency outage
+    assert.notStrictEqual(result.emergencyOutage, null)
+    assert.strictEqual(result.emergencyOutage.sub_type, "Стабілізаційне відключення")
+    assert.strictEqual(result.emergencyOutage.start_date, "10.11.2025 18:41")
+    assert.strictEqual(result.emergencyOutage.end_date, "10.11.2025 22:00")
+
+    // Verify scheduled outage is ALSO present
+    assert.notStrictEqual(result.scheduledOutage, null)
+    assert.strictEqual(result.scheduledOutage.queueGroup, "GPV1.2")
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 3)
+    assert.strictEqual(result.scheduledOutage.periods.length, 1)
+    assert.strictEqual(result.scheduledOutage.scheduleDescription, "01:00-04:00")
   })
 })
 
@@ -429,45 +463,35 @@ describe("Integration tests", () => {
     const result = checkPlannedOutages(info)
 
     // Verify the correct number of outage slots
-    assert.strictEqual(result.outageSlots.length, 9)
+    assert.strictEqual(result.scheduledOutage.outageSlots.length, 9)
 
-    // Verify periods are correctly grouped
-    // Period 1: hour 1 "second" (00:30-01:00) - standalone
-    // Period 2: hours 2-4 "no" (01:00-04:00) - combined
-    // Period 3: hour 12 "no" (11:00-12:00)
-    // Period 4: hour 18 "no" (17:00-18:00)
-    // Period 5: hour 22 "second" (21:30-22:00) - standalone
-    // Period 6: hours 23-24 "no" (22:00-24:00) - combined
-    assert.strictEqual(result.periods.length, 6)
+    // Verify periods are correctly grouped (consecutive periods are combined)
+    // Period 1: hours 1-4 (00:30-04:00) - hour 1 "second" flows into hours 2-4 "no"
+    // Period 2: hour 12 "no" (11:00-12:00)
+    // Period 3: hour 18 "no" (17:00-18:00)
+    // Period 4: hours 22-24 (21:30-24:00) - hour 22 "second" flows into hours 23-24 "no"
+    assert.strictEqual(result.scheduledOutage.periods.length, 4)
 
-    // Verify period 1: 00:30 - 01:00 (just hour 1 "second")
-    assert.strictEqual(result.periods[0].start, 1)
-    assert.strictEqual(result.periods[0].end, 1)
+    // Verify period 1: 00:30 - 04:00 (hours 1-4 combined)
+    assert.strictEqual(result.scheduledOutage.periods[0].start, 1)
+    assert.strictEqual(result.scheduledOutage.periods[0].end, 4)
 
-    // Verify period 2: 01:00 - 04:00 (hours 2-4 "no")
-    assert.strictEqual(result.periods[1].start, 2)
-    assert.strictEqual(result.periods[1].end, 4)
+    // Verify period 2: 11:00 - 12:00
+    assert.strictEqual(result.scheduledOutage.periods[1].start, 12)
+    assert.strictEqual(result.scheduledOutage.periods[1].end, 12)
 
-    // Verify period 3: 11:00 - 12:00
-    assert.strictEqual(result.periods[2].start, 12)
-    assert.strictEqual(result.periods[2].end, 12)
+    // Verify period 3: 17:00 - 18:00
+    assert.strictEqual(result.scheduledOutage.periods[2].start, 18)
+    assert.strictEqual(result.scheduledOutage.periods[2].end, 18)
 
-    // Verify period 4: 17:00 - 18:00
-    assert.strictEqual(result.periods[3].start, 18)
-    assert.strictEqual(result.periods[3].end, 18)
-
-    // Verify period 5: 21:30 - 22:00 (just hour 22 "second")
-    assert.strictEqual(result.periods[4].start, 22)
-    assert.strictEqual(result.periods[4].end, 22)
-
-    // Verify period 6: 22:00 - 24:00 (hours 23-24 "no")
-    assert.strictEqual(result.periods[5].start, 23)
-    assert.strictEqual(result.periods[5].end, 24)
+    // Verify period 4: 21:30 - 24:00 (hours 22-24 combined)
+    assert.strictEqual(result.scheduledOutage.periods[3].start, 22)
+    assert.strictEqual(result.scheduledOutage.periods[3].end, 24)
 
     // Verify formatted schedule
     assert.strictEqual(
-      result.scheduleDescription,
-      "00:30-01:00, 01:00-04:00, 11:00-12:00, 17:00-18:00, 21:30-22:00, 22:00-24:00"
+      result.scheduledOutage.scheduleDescription,
+      "00:30-04:00, 11:00-12:00, 17:00-18:00, 21:30-24:00"
     )
   })
 })
