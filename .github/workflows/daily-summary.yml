@@ -2,11 +2,8 @@ name: Daily morning summary
 
 on:
   schedule:
-    # Run at midnight (00:00) Kyiv time (UTC+2/+3)
-    # During winter: 22:00 UTC (00:00 Kyiv UTC+2)
-    # During summer: 21:00 UTC (00:00 Kyiv UTC+3)
-    # Using 21:00 UTC to cover both cases
-    - cron: "0 21 * * *"
+    # Run at 00:10 UTC every day
+    - cron: "10 0 * * *"
   workflow_dispatch:
 
 jobs:

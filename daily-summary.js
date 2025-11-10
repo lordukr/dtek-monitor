@@ -92,11 +92,11 @@ async function getInfo() {
 
 function checkPlannedOutages(info) {
   console.log("🌀 Checking planned outages for today...")
-  console.log("🔍 Info object structure check:")
-  console.log(`   - info exists: ${!!info}`)
-  console.log(`   - info.data exists: ${!!info?.data}`)
-  console.log(`   - info.preset exists: ${!!info?.preset}`)
-  console.log(`   - info.fact exists: ${!!info?.fact}`)
+  process.stdout.write("🔍 Info object structure check:\n")
+  process.stdout.write(`   - info exists: ${!!info}\n`)
+  process.stdout.write(`   - info.data exists: ${!!info?.data}\n`)
+  process.stdout.write(`   - info.preset exists: ${!!info?.preset}\n`)
+  process.stdout.write(`   - info.fact exists: ${!!info?.fact}\n`)
 
   if (!info?.data) {
     throw Error("❌ Power outage info missed.")
@@ -149,49 +149,25 @@ function checkPlannedOutages(info) {
   const queueGroup = sub_type_reason[0] // e.g., "GPV1.2"
   console.log(`🔢 House queue group: ${queueGroup}`)
 
-  // Calculate today's timestamp - convert current date to Unix timestamp (start of day in Kyiv timezone)
-  // This is critical because GitHub Actions runs in UTC, but we need Kyiv time
-  // Example: 23:00 UTC on Nov 9 = 01:00 on Nov 10 in Kyiv (UTC+2), so we need Nov 10's data
+  // Calculate today's timestamp using UTC date (not Kyiv time)
+  // This matches when the script runs: 00:10 UTC on Nov 10 = check Nov 10 schedule
   const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth()
+  const day = now.getUTCDate()
 
-  // Get the date components in Kyiv timezone using Intl.DateTimeFormat
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Kyiv",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-  const parts = formatter.formatToParts(now)
-  const year = parseInt(parts.find((p) => p.type === "year").value)
-  const month = parseInt(parts.find((p) => p.type === "month").value) - 1 // JS months are 0-indexed
-  const day = parseInt(parts.find((p) => p.type === "day").value)
+  // Get Unix timestamp for start of day (00:00:00) in UTC
+  const todayTimestamp = Math.floor(Date.UTC(year, month, day, 0, 0, 0, 0) / 1000)
 
-  // Create date for start of day in UTC, then adjust for Kyiv timezone
-  // Kyiv is UTC+2 in winter, UTC+3 in summer
-  const startOfDayUTC = Date.UTC(year, month, day, 0, 0, 0, 0)
-
-  // Get the offset between UTC and Kyiv for this date
-  const tempDate = new Date(startOfDayUTC)
-  const kyivOffset = new Date(
-    tempDate.toLocaleString("en-US", { timeZone: "Europe/Kyiv" })
-  ).getTime()
-  const utcTime = new Date(
-    tempDate.toLocaleString("en-US", { timeZone: "UTC" })
-  ).getTime()
-  const offset = utcTime - kyivOffset
-
-  // Apply offset to get the correct timestamp for start of day in Kyiv
-  const todayTimestamp = Math.floor((startOfDayUTC + offset) / 1000)
-
+  console.log(`📆 Current UTC date: ${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`)
+  console.log(`📆 Calculated timestamp: ${todayTimestamp}`)
+  console.log(
+    `   (Represents: ${new Date(todayTimestamp * 1000).toUTCString()})`
+  )
   console.log(`📆 API's today timestamp: ${info.fact?.today}`)
   console.log(
-    `   (API date: ${new Date(info.fact?.today * 1000).toLocaleDateString("uk-UA")})`
+    `   (API represents: ${new Date((info.fact?.today || 0) * 1000).toUTCString()})`
   )
-  console.log(`📆 Calculated today's timestamp: ${todayTimestamp}`)
-  console.log(
-    `   (Calculated date: ${new Date(todayTimestamp * 1000).toLocaleDateString("uk-UA")})`
-  )
-  console.log(`📆 Current Kyiv date: ${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`)
 
   // Log all available timestamps in fact.data to help debug
   if (info.fact?.data) {
