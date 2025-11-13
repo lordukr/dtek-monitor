@@ -19,7 +19,9 @@
       "Bash(node test-outage-display.js:*)",
       "Bash(node test-change-detection.js:*)",
       "Bash(git rev-parse:*)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
