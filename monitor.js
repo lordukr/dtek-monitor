@@ -585,14 +585,6 @@ async function commitMessageHistory() {
       console.log("⚠️ Could not determine or switch branch:", error.message)
     }
 
-    // Pull latest changes from remote to avoid conflicts (using merge strategy)
-    try {
-      console.log("🔄 Pulling latest changes from remote...")
-      execSync(`git pull origin ${mainBranch} --no-rebase`, { stdio: "inherit" })
-    } catch (pullError) {
-      console.log("⚠️ Pull failed, will try to push anyway:", pullError.message)
-    }
-
     // Add the message history file
     execSync("git add artifacts/message-history.json", { stdio: "inherit" })
 
@@ -600,17 +592,32 @@ async function commitMessageHistory() {
     try {
       execSync('git diff --cached --quiet artifacts/message-history.json')
       console.log("⏭️ No changes to commit")
+      return
     } catch (error) {
-      // There are changes, commit them
-      execSync(
-        'git commit -m "chore: update message history [skip ci]"',
-        { stdio: "inherit" }
-      )
-
-      // Push to the main branch
-      execSync(`git push origin ${mainBranch}`, { stdio: "inherit" })
-      console.log(`✅ Message history committed and pushed to ${mainBranch}`)
+      // There are changes, continue with commit
     }
+
+    // Commit the changes first
+    execSync(
+      'git commit -m "chore: update message history [skip ci]"',
+      { stdio: "inherit" }
+    )
+
+    // Pull latest changes from remote with rebase
+    try {
+      console.log("🔄 Pulling latest changes from remote...")
+      execSync(`git pull origin ${mainBranch} --rebase`, { stdio: "inherit" })
+    } catch (pullError) {
+      console.log("⚠️ Pull failed:", pullError.message)
+      // If pull fails, abort rebase and try to push anyway
+      try {
+        execSync("git rebase --abort", { stdio: "ignore" })
+      } catch {}
+    }
+
+    // Push to the main branch
+    execSync(`git push origin ${mainBranch}`, { stdio: "inherit" })
+    console.log(`✅ Message history committed and pushed to ${mainBranch}`)
   } catch (error) {
     console.log("⚠️ Failed to commit message history:", error.message)
   }
