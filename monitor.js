@@ -3,7 +3,6 @@ const { chromium } = require("playwright")
 const fs = require("fs")
 const path = require("path")
 
-const LAST_MESSAGE_FILE = path.resolve("artifacts", `last-message.json`)
 const MESSAGE_HISTORY_FILE = path.resolve("artifacts", `message-history.json`)
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, CITY, STREET, HOUSE } =
@@ -323,43 +322,6 @@ function findNextScheduledOutage(info, sub_type_reason) {
   return null
 }
 
-function loadLastMessage() {
-  if (!fs.existsSync(LAST_MESSAGE_FILE)) return null
-
-  const lastMessage = JSON.parse(
-    fs.readFileSync(LAST_MESSAGE_FILE, "utf8").trim()
-  )
-
-  if (lastMessage?.date) {
-    const messageDay = new Date(lastMessage.date * 1000)
-      .toISOString()
-      .slice(0, 10)
-    const today = new Date().toISOString().slice(0, 10)
-
-    if (messageDay < today) {
-      deleteLastMessage()
-      return null
-    }
-  }
-
-  return lastMessage
-}
-
-function saveLastMessage({ date, message_id } = {}) {
-  fs.mkdirSync(path.dirname(LAST_MESSAGE_FILE), { recursive: true })
-  fs.writeFileSync(
-    LAST_MESSAGE_FILE,
-    JSON.stringify({
-      message_id,
-      date,
-    })
-  )
-}
-
-function deleteLastMessage() {
-  fs.rmdirSync(path.dirname(LAST_MESSAGE_FILE), { recursive: true })
-}
-
 function loadMessageHistory() {
   if (!fs.existsSync(MESSAGE_HISTORY_FILE)) return null
 
@@ -532,13 +494,9 @@ async function sendNotification(info, outageData) {
 
   console.log("🌀 Sending notification...")
 
-  const lastMessage = loadLastMessage() || {}
-
   try {
     const res = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${
-        lastMessage.message_id ? "editMessageText" : "sendMessage"
-      }`,
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -546,15 +504,12 @@ async function sendNotification(info, outageData) {
           chat_id: TELEGRAM_CHAT_ID,
           text,
           parse_mode: "HTML",
-          message_id: lastMessage.message_id ?? undefined,
         }),
       }
     )
 
     const data = await res.json()
     console.log("🟢 Notification sent.", data)
-
-    saveLastMessage(data.result)
 
     // Save to message history
     saveMessageHistory({
@@ -566,7 +521,6 @@ async function sendNotification(info, outageData) {
     return { wasDuplicate: false, success: data.ok }
   } catch (error) {
     console.log("🔴 Notification not sent.", error.message)
-    deleteLastMessage()
     console.log("🌀 Try again...")
     sendNotification(info, outageData)
   }
