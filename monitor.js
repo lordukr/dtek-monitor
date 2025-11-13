@@ -346,18 +346,22 @@ function saveMessageHistory(entry, outageData = null) {
 function createMessageHash(outageData) {
   const { emergencyOutage, nextScheduledOutage } = outageData
 
-  // Create a compact hash representing the current outage state
+  // Create a compact hash representing only the critical timing information
+  // This ensures we don't send duplicates for the same time ranges
   const parts = []
 
   if (emergencyOutage) {
-    parts.push(
-      `E:${emergencyOutage.sub_type}|${emergencyOutage.start_date}|${emergencyOutage.end_date}`
-    )
+    // Extract only start and end times, ignore sub_type description
+    const startTime = emergencyOutage.start_date || ""
+    const endTime = emergencyOutage.end_date || ""
+    parts.push(`E:${startTime}|${endTime}`)
   }
 
   if (nextScheduledOutage) {
     const { queueGroup, currentOutage, nextOutage } = nextScheduledOutage
     parts.push(`Q:${queueGroup}`)
+
+    // Only include time ranges, not descriptions
     if (currentOutage) {
       parts.push(`C:${currentOutage.timeRange}`)
     }
