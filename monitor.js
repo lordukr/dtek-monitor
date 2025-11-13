@@ -598,6 +598,45 @@ async function commitMessageHistory() {
       return
     }
 
+    // Determine the main branch and ensure we're on it
+    let mainBranch = "main"
+    try {
+      const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+        encoding: "utf8",
+      }).trim()
+      console.log(`📍 Current branch: ${currentBranch}`)
+
+      // Detect if the repo uses 'master' or 'main'
+      try {
+        execSync("git show-ref --verify refs/heads/main", { stdio: "ignore" })
+        mainBranch = "main"
+      } catch {
+        try {
+          execSync("git show-ref --verify refs/heads/master", { stdio: "ignore" })
+          mainBranch = "master"
+        } catch {
+          console.log("⚠️ Could not determine main branch")
+        }
+      }
+
+      console.log(`📌 Main branch: ${mainBranch}`)
+
+      if (currentBranch !== mainBranch) {
+        console.log(`⚠️ Not on ${mainBranch} branch, checking out ${mainBranch}...`)
+        execSync(`git checkout ${mainBranch}`, { stdio: "inherit" })
+      }
+    } catch (error) {
+      console.log("⚠️ Could not determine or switch branch:", error.message)
+    }
+
+    // Pull latest changes from remote to avoid conflicts (using merge strategy)
+    try {
+      console.log("🔄 Pulling latest changes from remote...")
+      execSync(`git pull origin ${mainBranch} --no-rebase`, { stdio: "inherit" })
+    } catch (pullError) {
+      console.log("⚠️ Pull failed, will try to push anyway:", pullError.message)
+    }
+
     // Add the message history file
     execSync("git add artifacts/message-history.json", { stdio: "inherit" })
 
@@ -611,8 +650,10 @@ async function commitMessageHistory() {
         'git commit -m "chore: update message history [skip ci]"',
         { stdio: "inherit" }
       )
-      execSync("git push", { stdio: "inherit" })
-      console.log("✅ Message history committed and pushed")
+
+      // Push to the main branch
+      execSync(`git push origin ${mainBranch}`, { stdio: "inherit" })
+      console.log(`✅ Message history committed and pushed to ${mainBranch}`)
     }
   } catch (error) {
     console.log("⚠️ Failed to commit message history:", error.message)
