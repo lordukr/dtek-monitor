@@ -13,17 +13,31 @@ async function getInfo() {
   console.log("🌀 Getting info...")
 
   const browser = await chromium.launch({ headless: true })
-  const browserContext = await browser.newContext()
+  const browserContext = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    locale: "uk-UA",
+  })
   const browserPage = await browserContext.newPage()
 
   try {
     await browserPage.goto("https://www.dtek-krem.com.ua/ua/shutdowns", {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
     })
+
+    // Wait for the page to be fully loaded and interactive
+    await browserPage.waitForLoadState("networkidle", { timeout: 30000 })
+
+    // Wait for bot protection to pass and page to fully render
+    await browserPage.waitForTimeout(5000)
+
+    // Wait for the main content to be visible
+    await browserPage.waitForSelector('.form__input', { timeout: 10000 })
 
     const csrfTokenTag = await browserPage.waitForSelector(
       'meta[name="csrf-token"]',
-      { state: "attached" }
+      { state: "attached", timeout: 10000 }
     )
     const csrfToken = await csrfTokenTag.getAttribute("content")
 
@@ -46,6 +60,7 @@ async function getInfo() {
           },
           body: formData,
         })
+
         return await response.json()
       },
       { CITY, STREET, csrfToken }
