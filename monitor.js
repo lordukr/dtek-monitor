@@ -361,32 +361,23 @@ function deleteLastMessage() {
 }
 
 function loadMessageHistory() {
-  if (!fs.existsSync(MESSAGE_HISTORY_FILE)) return []
+  if (!fs.existsSync(MESSAGE_HISTORY_FILE)) return null
 
   try {
-    const history = JSON.parse(
+    const lastMessage = JSON.parse(
       fs.readFileSync(MESSAGE_HISTORY_FILE, "utf8").trim()
     )
-    return Array.isArray(history) ? history : []
+    return lastMessage
   } catch (error) {
     console.log("⚠️ Failed to load message history:", error.message)
-    return []
+    return null
   }
 }
 
 function saveMessageHistory(entry) {
-  const history = loadMessageHistory()
-
-  // Keep only last 50 entries to prevent file from growing too large
-  const MAX_ENTRIES = 50
-  if (history.length >= MAX_ENTRIES) {
-    history.shift() // Remove oldest entry
-  }
-
-  history.push(entry)
-
+  // Always overwrite with just the latest entry
   fs.mkdirSync(path.dirname(MESSAGE_HISTORY_FILE), { recursive: true })
-  fs.writeFileSync(MESSAGE_HISTORY_FILE, JSON.stringify(history, null, 2))
+  fs.writeFileSync(MESSAGE_HISTORY_FILE, JSON.stringify(entry, null, 2))
 }
 
 function createMessageHash(outageData) {
@@ -416,14 +407,10 @@ function createMessageHash(outageData) {
 }
 
 function isDuplicateMessage(outageData) {
-  const history = loadMessageHistory()
-  if (history.length === 0) return false
-
-  const currentHash = createMessageHash(outageData)
-  const lastEntry = history[history.length - 1]
-
+  const lastEntry = loadMessageHistory()
   if (!lastEntry) return false
 
+  const currentHash = createMessageHash(outageData)
   const lastHash = lastEntry.hash
   const lastSentTime = new Date(lastEntry.timestamp)
   const now = new Date()
