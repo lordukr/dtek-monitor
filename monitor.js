@@ -336,10 +336,11 @@ function loadMessageHistory() {
   }
 }
 
-function saveMessageHistory(entry) {
+function saveMessageHistory(entry, outageData = null) {
   // Always overwrite with just the latest entry
+  const historyEntry = outageData ? { ...entry, outageData } : entry
   fs.mkdirSync(path.dirname(MESSAGE_HISTORY_FILE), { recursive: true })
-  fs.writeFileSync(MESSAGE_HISTORY_FILE, JSON.stringify(entry, null, 2))
+  fs.writeFileSync(MESSAGE_HISTORY_FILE, JSON.stringify(historyEntry, null, 2))
 }
 
 function createMessageHash(outageData) {
@@ -393,6 +394,124 @@ function isDuplicateMessage(outageData) {
   // Same hash but sent more than 10 minutes ago - allow resend
   console.log("🔄 Resending notification (last sent over 10 minutes ago)")
   return false
+}
+
+function detectOutagePassed(currentOutageData) {
+  const lastEntry = loadMessageHistory()
+  if (!lastEntry || !lastEntry.outageData) return null
+
+  const previousData = lastEntry.outageData
+
+  // Check if there was a current outage previously
+  const hadCurrentOutage = previousData.nextScheduledOutage?.currentOutage
+  const hasCurrentOutage = currentOutageData.nextScheduledOutage?.currentOutage
+
+  // If we had a current outage before and now we don't, it has passed
+  if (hadCurrentOutage && !hasCurrentOutage) {
+    console.log("✅ Current outage has passed!")
+
+    // Return information about the next outage (if any)
+    return {
+      passedOutage: hadCurrentOutage,
+      nextOutage: currentOutageData.nextScheduledOutage?.nextOutage || null,
+      queueGroup: currentOutageData.nextScheduledOutage?.queueGroup || previousData.nextScheduledOutage?.queueGroup
+    }
+  }
+
+  return null
+}
+
+async function sendOutagePassedNotification(info, passedOutageInfo) {
+  if (!TELEGRAM_BOT_TOKEN)
+    throw Error("❌ Missing telegram bot token or chat id.")
+  if (!TELEGRAM_CHAT_ID) throw Error("❌ Missing telegram chat id.")
+
+  const { passedOutage, nextOutage, queueGroup } = passedOutageInfo
+
+  const now = new Date()
+  const time = now.toLocaleTimeString("uk-UA", {
+    timeZone: "Europe/Kyiv",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  const date = now.toLocaleDateString("uk-UA", {
+    timeZone: "Europe/Kyiv",
+  })
+  const updateNotificationTimestamp = `${time} ${date}`
+
+  const messageParts = [
+    "✅ <b>Відключення завершено!</b>",
+    "",
+    "📊 <b>Черга:</b>",
+    queueGroup,
+    "",
+    "🕐 <b>Завершене відключення:</b>",
+    passedOutage.timeRange,
+    "",
+    "ℹ️ <b>Тип:</b>",
+    passedOutage.description,
+  ]
+
+  // Add next outage information if available
+  if (nextOutage) {
+    messageParts.push(
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "",
+      "⏰ <b>Наступне відключення</b>",
+      "",
+      "🕐 <b>Час:</b>",
+      nextOutage.timeRange,
+      "",
+      "ℹ️ <b>Тип:</b>",
+      nextOutage.description
+    )
+  } else {
+    messageParts.push(
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "",
+      "🎉 <b>Більше відключень сьогодні не заплановано!</b>"
+    )
+  }
+
+  // Add metadata
+  const { updateTimestamp } = info || {}
+  messageParts.push(
+    "",
+    "⏰ <b>Час оновлення інформації:</b>",
+    updateTimestamp || updateNotificationTimestamp,
+    "⏰ <b>Час оновлення повідомлення:</b>",
+    updateNotificationTimestamp
+  )
+
+  const text = messageParts.join("\n")
+
+  console.log("🌀 Sending outage-passed notification...")
+
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text,
+          parse_mode: "HTML",
+        }),
+      }
+    )
+
+    const data = await res.json()
+    console.log("🟢 Outage-passed notification sent.", data)
+
+    return { success: data.ok }
+  } catch (error) {
+    console.log("🔴 Outage-passed notification not sent.", error.message)
+    console.log("🌀 Try again...")
+    sendOutagePassedNotification(info, passedOutageInfo)
+  }
 }
 
 async function sendNotification(info, outageData) {
@@ -516,7 +635,7 @@ async function sendNotification(info, outageData) {
       timestamp: now.toISOString(),
       hash: createMessageHash(outageData),
       sent: data.ok,
-    })
+    }, outageData)
 
     return { wasDuplicate: false, success: data.ok }
   } catch (error) {
@@ -627,12 +746,39 @@ async function run() {
   const info = await getInfo()
   const outageData = checkOutage(info)
 
-  if (outageData.isOutageDetected) {
+  // Check if an outage has passed
+  const passedOutageInfo = detectOutagePassed(outageData)
+
+  if (passedOutageInfo) {
+    // An outage just ended - send "outage passed" notification
+    await sendOutagePassedNotification(info, passedOutageInfo)
+
+    // Update message history to reflect current state
+    const now = new Date()
+    saveMessageHistory({
+      timestamp: now.toISOString(),
+      hash: createMessageHash(outageData),
+      sent: true,
+      type: 'outage-passed'
+    }, outageData)
+
+    await commitMessageHistory()
+  } else if (outageData.isOutageDetected) {
+    // Regular outage notification
     await sendNotification(info, outageData)
     // Commit message history to git if running on GitHub (only if message was sent)
     await commitMessageHistory()
   } else {
     console.log("✅ No outage detected - no notification needed")
+
+    // Still update message history to track state changes
+    const now = new Date()
+    saveMessageHistory({
+      timestamp: now.toISOString(),
+      hash: createMessageHash(outageData),
+      sent: false,
+      type: 'no-outage'
+    }, outageData)
   }
 }
 
