@@ -16,7 +16,8 @@
       "Bash(node -e:*)",
       "Bash(git push:*)",
       "Bash(node monitor.js:*)",
-      "Bash(node test-outage-display.js:*)"
+      "Bash(node test-outage-display.js:*)",
+      "Bash(node test-change-detection.js:*)"
     ],
     "deny": [],
     "ask": []
