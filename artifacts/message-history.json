@@ -1,15 +1,10 @@
 {
-  "timestamp": "2025-11-14T07:44:06.863Z",
-  "hash": "E:06:30 14.11.2025|10:00 14.11.2025|Q:GPV1.2|C:06:30-10:00|N:17:00-20:30",
+  "timestamp": "2025-11-14T07:50:56.511Z",
+  "hash": "Q:GPV1.2|C:06:30-10:00|N:17:00-20:30",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": {
-      "sub_type": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "start_date": "06:30 14.11.2025",
-      "end_date": "10:00 14.11.2025",
-      "type": "2"
-    },
+    "emergencyOutage": null,
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
       "currentOutage": {
