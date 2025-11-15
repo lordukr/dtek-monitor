@@ -1,8 +1,7 @@
 {
-  "timestamp": "2025-11-15T05:09:17.890Z",
+  "timestamp": "2025-11-15T05:30:20.418Z",
   "hash": "E:03:30 15.11.2025|08:00 15.11.2025|Q:GPV1.2|N:14:00-17:30",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
     "emergencyOutage": {
