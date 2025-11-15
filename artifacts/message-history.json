@@ -1,6 +1,6 @@
 {
-  "timestamp": "2025-11-15T11:31:36.513Z",
-  "hash": "Q:GPV1.2|N:14:00-17:30",
+  "timestamp": "2025-11-15T11:41:50.401Z",
+  "hash": "Q:GPV1.2|N:16:00-17:30",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
@@ -9,7 +9,7 @@
       "queueGroup": "GPV1.2",
       "currentOutage": null,
       "nextOutage": {
-        "timeRange": "14:00-17:30",
+        "timeRange": "16:00-17:30",
         "description": "Світла немає",
         "status": "no"
       }
