@@ -412,6 +412,12 @@ function detectOutagePassed(currentOutageData) {
 
   // If we had a current outage before and now we don't, it has passed
   if (hadCurrentOutage && !hasCurrentOutage) {
+    // Don't send if we already sent an outage-passed notification for this same outage
+    if (lastEntry.type === 'outage-passed') {
+      console.log("⏭️ Outage-passed notification already sent for this outage")
+      return null
+    }
+
     console.log("✅ Current outage has passed!")
 
     // Return information about the next outage (if any)
@@ -769,20 +775,32 @@ async function run() {
     await commitMessageHistory()
   } else if (outageData.isOutageDetected) {
     // Regular outage notification
-    await sendNotification(info, outageData)
-    // Commit message history to git if running on GitHub (only if message was sent)
-    await commitMessageHistory()
+    const result = await sendNotification(info, outageData)
+
+    // Only commit if message was actually sent (not a duplicate)
+    if (result && !result.wasDuplicate) {
+      await commitMessageHistory()
+    }
   } else {
     console.log("✅ No outage detected - no notification needed")
 
-    // Still update message history to track state changes
-    const now = new Date()
-    saveMessageHistory({
-      timestamp: now.toISOString(),
-      hash: createMessageHash(outageData),
-      sent: false,
-      type: 'no-outage'
-    }, outageData)
+    // Check if the state has actually changed before updating history
+    const lastEntry = loadMessageHistory()
+    const currentHash = createMessageHash(outageData)
+
+    // Only update history if this is a new state (hash changed or first run)
+    if (!lastEntry || lastEntry.hash !== currentHash) {
+      console.log("📝 State changed - updating message history")
+      const now = new Date()
+      saveMessageHistory({
+        timestamp: now.toISOString(),
+        hash: currentHash,
+        sent: false,
+        type: 'no-outage'
+      }, outageData)
+    } else {
+      console.log("⏭️ State unchanged - no history update needed")
+    }
   }
 }
 
