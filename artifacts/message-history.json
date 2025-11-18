@@ -1,6 +1,6 @@
 {
-  "timestamp": "2025-11-18T04:18:18.890Z",
-  "hash": "Q:GPV1.2|N:07:00-08:30",
+  "timestamp": "2025-11-18T04:39:50.091Z",
+  "hash": "Q:GPV1.2|N:08:00-08:30",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
@@ -9,9 +9,9 @@
       "queueGroup": "GPV1.2",
       "currentOutage": null,
       "nextOutage": {
-        "timeRange": "07:00-08:30",
-        "description": "Світла немає",
-        "status": "no"
+        "timeRange": "08:00-08:30",
+        "description": "Світла не буде перші 30 хв.",
+        "status": "first"
       }
     }
   }
