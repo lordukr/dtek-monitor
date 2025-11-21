@@ -1,8 +1,7 @@
 {
-  "timestamp": "2025-11-21T18:39:24.957Z",
+  "timestamp": "2025-11-21T18:51:29.675Z",
   "hash": "E:17:00 21.11.2025|00:00 22.11.2025",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
     "emergencyOutage": {
