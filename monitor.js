@@ -355,11 +355,12 @@ function createMessageHash(outageData) {
     const startTime = emergencyOutage.start_date || ""
     const endTime = emergencyOutage.end_date || ""
     parts.push(`E:${startTime}|${endTime}`)
-  }
-
-  if (nextScheduledOutage) {
+    // When emergency exists, we don't include scheduled outages in hash
+    // This way if emergency ends, hash changes and triggers notification
+  } else if (nextScheduledOutage) {
+    // Only include scheduled outage info if NO emergency
     const { queueGroup, currentOutage, nextOutage } = nextScheduledOutage
-    parts.push(`Q:${queueGroup}`)
+    parts.push(`S:${queueGroup}`)
 
     // Only include time ranges, not descriptions
     if (currentOutage) {
@@ -389,6 +390,28 @@ function isDuplicateMessage(outageData) {
   // Same hash - this is a duplicate, skip it
   console.log("⏭️ Skipping duplicate message (same outage state)")
   return true
+}
+
+function calculateOutageDuration(timeRange) {
+  // Parse time range like "18:30-21:00" and calculate duration
+  const [startTime, endTime] = timeRange.split("-")
+  const [startHour, startMin] = startTime.split(":").map(Number)
+  const [endHour, endMin] = endTime.split(":").map(Number)
+
+  const startInMinutes = startHour * 60 + startMin
+  const endInMinutes = endHour * 60 + endMin
+  const durationInMinutes = endInMinutes - startInMinutes
+
+  const hours = Math.floor(durationInMinutes / 60)
+  const minutes = durationInMinutes % 60
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours} год ${minutes} хв`
+  } else if (hours > 0) {
+    return `${hours} год`
+  } else {
+    return `${minutes} хв`
+  }
 }
 
 function detectOutagePassed(currentOutageData) {
@@ -440,6 +463,8 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
   })
   const updateNotificationTimestamp = `${time} ${date}`
 
+  const passedDuration = calculateOutageDuration(passedOutage.timeRange)
+
   const messageParts = [
     "✅ <b>Відключення завершено!</b>",
     "",
@@ -449,12 +474,13 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
     "🕐 <b>Завершене відключення:</b>",
     passedOutage.timeRange,
     "",
-    "ℹ️ <b>Тип:</b>",
-    passedOutage.description,
+    "⏱ <b>Тривалість:</b>",
+    passedDuration,
   ]
 
   // Add next outage information if available
   if (nextOutage) {
+    const nextDuration = calculateOutageDuration(nextOutage.timeRange)
     messageParts.push(
       "",
       "━━━━━━━━━━━━━━━━━━━━",
@@ -464,8 +490,8 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
       "🕐 <b>Час:</b>",
       nextOutage.timeRange,
       "",
-      "ℹ️ <b>Тип:</b>",
-      nextOutage.description
+      "⏱ <b>Тривалість:</b>",
+      nextDuration
     )
   } else {
     messageParts.push(
@@ -556,29 +582,25 @@ async function sendNotification(info, outageData) {
       "🟢 <b>Час відновлення:</b>",
       end_date || "Невідомий"
     )
-
-    // Add separator if we also have scheduled outages
-    if (nextScheduledOutage) {
-      messageParts.push("", "━━━━━━━━━━━━━━━━━━━━", "")
-    }
   }
 
-  // Add scheduled outage section if exists
-  if (nextScheduledOutage) {
+  // Add scheduled outage section ONLY if no emergency
+  if (nextScheduledOutage && !emergencyOutage) {
     const { queueGroup, currentOutage, nextOutage } = nextScheduledOutage
 
     messageParts.push("📊 <b>Черга:</b>", queueGroup, "")
 
     // Show current outage if exists
     if (currentOutage) {
+      const currentDuration = calculateOutageDuration(currentOutage.timeRange)
       messageParts.push(
         "⚡️ <b>Поточне відключення</b>",
         "",
         "🕐 <b>Час:</b>",
         currentOutage.timeRange,
         "",
-        "ℹ️ <b>Тип:</b>",
-        currentOutage.description
+        "⏱ <b>Тривалість:</b>",
+        currentDuration
       )
 
       // Add separator if next outage also exists
@@ -589,14 +611,15 @@ async function sendNotification(info, outageData) {
 
     // Show next outage if exists
     if (nextOutage) {
+      const nextDuration = calculateOutageDuration(nextOutage.timeRange)
       messageParts.push(
         "⏰ <b>Наступне відключення</b>",
         "",
         "🕐 <b>Час:</b>",
         nextOutage.timeRange,
         "",
-        "ℹ️ <b>Тип:</b>",
-        nextOutage.description
+        "⏱ <b>Тривалість:</b>",
+        nextDuration
       )
     }
   }
