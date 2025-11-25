@@ -379,9 +379,6 @@ function isDuplicateMessage(outageData) {
 
   const currentHash = createMessageHash(outageData)
   const lastHash = lastEntry.hash
-  const lastSentTime = new Date(lastEntry.timestamp)
-  const now = new Date()
-  const diffMinutes = (now - lastSentTime) / 1000 / 60
 
   // If hash is different, it's not a duplicate - outage range has changed
   if (lastHash !== currentHash) {
@@ -389,15 +386,9 @@ function isDuplicateMessage(outageData) {
     return false
   }
 
-  // Same hash - check if sent recently
-  if (diffMinutes < 10) {
-    console.log("⏭️ Skipping duplicate message (sent within last 10 minutes)")
-    return true
-  }
-
-  // Same hash but sent more than 10 minutes ago - allow resend
-  console.log("🔄 Resending notification (last sent over 10 minutes ago)")
-  return false
+  // Same hash - this is a duplicate, skip it
+  console.log("⏭️ Skipping duplicate message (same outage state)")
+  return true
 }
 
 function detectOutagePassed(currentOutageData) {
