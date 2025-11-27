@@ -1,23 +1,11 @@
 {
-  "timestamp": "2025-11-27T18:42:40.485Z",
-  "hash": "E:20:00 27.11.2025|23:00 27.11.2025",
+  "timestamp": "2025-11-27T19:07:39.430Z",
+  "hash": "",
   "sent": true,
+  "type": "outage-passed",
   "outageData": {
-    "isOutageDetected": true,
-    "emergencyOutage": {
-      "sub_type": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "start_date": "20:00 27.11.2025",
-      "end_date": "23:00 27.11.2025",
-      "type": "2"
-    },
-    "nextScheduledOutage": {
-      "queueGroup": "GPV1.2",
-      "currentOutage": {
-        "timeRange": "20:00-21:00",
-        "description": "Світла немає",
-        "status": "no"
-      },
-      "nextOutage": null
-    }
+    "isOutageDetected": false,
+    "emergencyOutage": null,
+    "nextScheduledOutage": null
   }
 }
