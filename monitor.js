@@ -445,6 +445,111 @@ function detectOutagePassed(currentOutageData) {
   return null
 }
 
+function detectOutageCancelled(currentOutageData) {
+  const lastEntry = loadMessageHistory()
+  if (!lastEntry || !lastEntry.outageData) return null
+
+  const previousData = lastEntry.outageData
+
+  // Check if we had any scheduled outage before (current or next)
+  const hadScheduledOutage = previousData.nextScheduledOutage?.currentOutage ||
+                              previousData.nextScheduledOutage?.nextOutage
+  const hasScheduledOutage = currentOutageData.nextScheduledOutage?.currentOutage ||
+                              currentOutageData.nextScheduledOutage?.nextOutage
+
+  // If we had a scheduled outage but now have none, it was cancelled
+  if (hadScheduledOutage && !hasScheduledOutage && !previousData.emergencyOutage) {
+    // Don't send if we already sent a cancellation notification
+    if (lastEntry.type === 'outage-cancelled') {
+      console.log("⏭️ Outage cancellation notification already sent")
+      return null
+    }
+
+    console.log("✅ Scheduled outage was cancelled!")
+
+    return {
+      cancelledOutage: hadScheduledOutage,
+      queueGroup: previousData.nextScheduledOutage?.queueGroup
+    }
+  }
+
+  return null
+}
+
+async function sendOutageCancelledNotification(info, cancelledOutageInfo) {
+  if (!TELEGRAM_BOT_TOKEN)
+    throw Error("❌ Missing telegram bot token or chat id.")
+  if (!TELEGRAM_CHAT_ID) throw Error("❌ Missing telegram chat id.")
+
+  const { cancelledOutage, queueGroup } = cancelledOutageInfo
+
+  const now = new Date()
+  const time = now.toLocaleTimeString("uk-UA", {
+    timeZone: "Europe/Kyiv",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  const date = now.toLocaleDateString("uk-UA", {
+    timeZone: "Europe/Kyiv",
+  })
+  const updateNotificationTimestamp = `${time} ${date}`
+
+  const cancelledDuration = calculateOutageDuration(cancelledOutage.timeRange)
+
+  const messageParts = [
+    "🎉 <b>Відключення скасовано!</b>",
+    "",
+    "📊 <b>Черга:</b>",
+    queueGroup,
+    "",
+    "🕐 <b>Скасоване відключення:</b>",
+    cancelledOutage.timeRange,
+    "",
+    "⏱ <b>Тривалість була б:</b>",
+    cancelledDuration,
+    "",
+    "✅ <b>Електропостачання буде безперервним</b>"
+  ]
+
+  // Add metadata
+  const { updateTimestamp } = info || {}
+  messageParts.push(
+    "",
+    "⏰ <b>Час оновлення інформації:</b>",
+    updateTimestamp || updateNotificationTimestamp,
+    "⏰ <b>Час оновлення повідомлення:</b>",
+    updateNotificationTimestamp
+  )
+
+  const text = messageParts.join("\n")
+
+  console.log("🌀 Sending outage-cancelled notification...")
+
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text,
+          parse_mode: "HTML",
+        }),
+      }
+    )
+
+    const data = await res.json()
+    console.log("🟢 Outage-cancelled notification sent.", data)
+
+    return { success: data.ok }
+  } catch (error) {
+    console.log("🔴 Outage-cancelled notification not sent.", error.message)
+    console.log("🌀 Try again...")
+    sendOutageCancelledNotification(info, cancelledOutageInfo)
+  }
+}
+
 async function sendOutagePassedNotification(info, passedOutageInfo) {
   if (!TELEGRAM_BOT_TOKEN)
     throw Error("❌ Missing telegram bot token or chat id.")
@@ -773,6 +878,9 @@ async function run() {
   // Check if an outage has passed
   const passedOutageInfo = detectOutagePassed(outageData)
 
+  // Check if an outage was cancelled
+  const cancelledOutageInfo = detectOutageCancelled(outageData)
+
   if (passedOutageInfo) {
     // An outage just ended - send "outage passed" notification
     await sendOutagePassedNotification(info, passedOutageInfo)
@@ -784,6 +892,20 @@ async function run() {
       hash: createMessageHash(outageData),
       sent: true,
       type: 'outage-passed'
+    }, outageData)
+
+    await commitMessageHistory()
+  } else if (cancelledOutageInfo) {
+    // An outage was cancelled - send "outage cancelled" notification
+    await sendOutageCancelledNotification(info, cancelledOutageInfo)
+
+    // Update message history to reflect current state
+    const now = new Date()
+    saveMessageHistory({
+      timestamp: now.toISOString(),
+      hash: createMessageHash(outageData),
+      sent: true,
+      type: 'outage-cancelled'
     }, outageData)
 
     await commitMessageHistory()
