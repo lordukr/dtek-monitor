@@ -1,19 +1,23 @@
 {
-  "timestamp": "2025-12-07T17:07:28.270Z",
-  "hash": "S:GPV1.2|N:22:30-24:00",
+  "timestamp": "2025-12-07T20:31:36.444Z",
+  "hash": "E:22:30 07.12.2025|02:00 08.12.2025",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": null,
+    "emergencyOutage": {
+      "sub_type": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "start_date": "22:30 07.12.2025",
+      "end_date": "02:00 08.12.2025",
+      "type": "2"
+    },
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
-      "currentOutage": null,
-      "nextOutage": {
+      "currentOutage": {
         "timeRange": "22:30-24:00",
         "description": "Світла не буде другі 30 хв",
         "status": "second"
-      }
+      },
+      "nextOutage": null
     }
   }
 }
