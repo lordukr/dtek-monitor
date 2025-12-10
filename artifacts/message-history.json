@@ -1,11 +1,15 @@
 {
-  "timestamp": "2025-12-10T18:46:30.819Z",
-  "hash": "",
+  "timestamp": "2025-12-10T21:52:31.135Z",
+  "hash": "E:00:01 11.12.2025|07:00 11.12.2025",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
-    "isOutageDetected": false,
-    "emergencyOutage": null,
+    "isOutageDetected": true,
+    "emergencyOutage": {
+      "sub_type": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "start_date": "00:01 11.12.2025",
+      "end_date": "07:00 11.12.2025",
+      "type": "2"
+    },
     "nextScheduledOutage": null
   }
 }
