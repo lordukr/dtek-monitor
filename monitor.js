@@ -84,12 +84,20 @@ function checkOutage(info) {
   const houseData = info?.data?.[HOUSE] || {}
   const { sub_type, start_date, end_date, type, sub_type_reason } = houseData
 
+  // Check if this is a scheduled outage (not emergency)
+  const isScheduledOutageText = sub_type &&
+    (sub_type.includes("графіку погодинних") ||
+     sub_type.includes("Згідно графіку") ||
+     sub_type.includes("According to"))
+
   // Check for immediate/emergency outages
-  const hasEmergencyOutage =
+  // If sub_type mentions "hourly schedule", it's NOT an emergency
+  const hasEmergencyOutage = !isScheduledOutageText && (
     (sub_type && sub_type !== "") ||
     (start_date && start_date !== "") ||
     (end_date && end_date !== "") ||
     (type && type !== "")
+  )
 
   let emergencyOutage = null
   if (hasEmergencyOutage) {
@@ -100,6 +108,8 @@ function checkOutage(info) {
       end_date,
       type,
     }
+  } else if (isScheduledOutageText) {
+    console.log("📅 Scheduled outage in emergency field (will use schedule data)")
   }
 
   // Check for scheduled outages
