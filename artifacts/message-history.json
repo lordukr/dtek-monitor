@@ -1,23 +1,18 @@
 {
-  "timestamp": "2025-12-27T08:56:46.202Z",
-  "hash": "E:10:31 27.12.2025|18:31 27.12.2025",
+  "timestamp": "2025-12-27T14:42:13.499Z",
+  "hash": "S:GPV1.2|C:15:00-18:30",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": {
-      "sub_type": "Аварійні ремонтні роботи",
-      "start_date": "10:31 27.12.2025",
-      "end_date": "18:31 27.12.2025",
-      "type": "2"
-    },
+    "emergencyOutage": null,
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
-      "currentOutage": null,
-      "nextOutage": {
+      "currentOutage": {
         "timeRange": "15:00-18:30",
         "description": "Світла немає",
         "status": "no"
-      }
+      },
+      "nextOutage": null
     }
   }
 }
