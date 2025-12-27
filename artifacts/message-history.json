@@ -1,11 +1,15 @@
 {
-  "timestamp": "2025-12-27T06:14:53.279Z",
-  "hash": "S:GPV1.2|N:15:00-18:30",
+  "timestamp": "2025-12-27T08:56:46.202Z",
+  "hash": "E:10:31 27.12.2025|18:31 27.12.2025",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": null,
+    "emergencyOutage": {
+      "sub_type": "Аварійні ремонтні роботи",
+      "start_date": "10:31 27.12.2025",
+      "end_date": "18:31 27.12.2025",
+      "type": "2"
+    },
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
       "currentOutage": null,
