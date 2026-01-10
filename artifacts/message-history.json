@@ -1,11 +1,15 @@
 {
-  "timestamp": "2026-01-10T06:47:06.620Z",
-  "hash": "",
+  "timestamp": "2026-01-10T09:51:28.578Z",
+  "hash": "E:11:05 10.01.2026|15:05 10.01.2026",
   "sent": true,
-  "type": "outage-cancelled",
   "outageData": {
-    "isOutageDetected": false,
-    "emergencyOutage": null,
+    "isOutageDetected": true,
+    "emergencyOutage": {
+      "sub_type": "Аварійні ремонтні роботи",
+      "start_date": "11:05 10.01.2026",
+      "end_date": "15:05 10.01.2026",
+      "type": "2"
+    },
     "nextScheduledOutage": null
   }
 }
