@@ -40,6 +40,28 @@ async function getInfo() {
     )
     const csrfToken = await csrfTokenTag.getAttribute("content")
 
+    // Check for system-wide emergency popup
+    const hasEmergencyPopup = await browserPage.evaluate(() => {
+      // Check for emergency popup with specific text
+      const emergencyText = "Наразі діють екстрені відключення електроенергії"
+
+      // Check if emergency popup dialog is visible
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      for (const dialog of dialogs) {
+        const isVisible = dialog.offsetParent !== null
+        const text = dialog.textContent || ""
+        if (isVisible && text.includes(emergencyText)) {
+          return true
+        }
+      }
+
+      return false
+    })
+
+    if (hasEmergencyPopup) {
+      console.log("🚨 System-wide emergency popup detected!")
+    }
+
     const info = await browserPage.evaluate(
       async ({ CITY, STREET, csrfToken }) => {
         const formData = new URLSearchParams()
@@ -64,6 +86,9 @@ async function getInfo() {
       },
       { CITY, STREET, csrfToken }
     )
+
+    // Add emergency popup flag to response
+    info.hasSystemWideEmergency = hasEmergencyPopup
 
     console.log("✅ Getting info finished.")
     return info
@@ -111,6 +136,9 @@ function checkOutage(info) {
     (type && type !== "")
   )
 
+  // Check for system-wide emergency from popup
+  const hasSystemWideEmergency = info.hasSystemWideEmergency || false
+
   let emergencyOutage = null
   if (hasEmergencyOutage) {
     console.log("🚨 Emergency/Active outage detected!")
@@ -119,6 +147,16 @@ function checkOutage(info) {
       start_date,
       end_date,
       type,
+    }
+  } else if (hasSystemWideEmergency) {
+    console.log("🚨 System-wide emergency detected (from popup)!")
+    // Create a generic emergency outage object for system-wide emergencies
+    emergencyOutage = {
+      sub_type: "Екстренні відключення електроенергії (системне повідомлення)",
+      start_date: "",
+      end_date: "Невідомо",
+      type: "system-wide",
+      isSystemWide: true,
     }
   } else if (isScheduledOutageText) {
     console.log("📅 Scheduled outage in emergency field (will use schedule data)")
