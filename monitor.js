@@ -84,15 +84,27 @@ function checkOutage(info) {
   const houseData = info?.data?.[HOUSE] || {}
   const { sub_type, start_date, end_date, type, sub_type_reason } = houseData
 
-  // Check if this is a scheduled outage (not emergency)
-  const isScheduledOutageText = sub_type &&
-    (sub_type.includes("графіку погодинних") ||
-     sub_type.includes("Згідно графіку") ||
+  // Check if this is an emergency outage
+  // Emergency indicators: "Екстренні відключення", "Аварійне", "без застосування графіку"
+  const isEmergencyOutageText = sub_type &&
+    (sub_type.includes("Екстренні відключення") ||
+     sub_type.includes("екстренн") ||
+     sub_type.includes("Аварійне") ||
+     sub_type.includes("аварійн") ||
+     sub_type.includes("без застосування графіку"))
+
+  // Check if this is a scheduled/stabilization outage (not emergency)
+  // "Стабілізаційне відключення (Згідно графіку..." = scheduled
+  // Only treat as scheduled if explicitly marked AND is NOT emergency
+  const isScheduledOutageText = !isEmergencyOutageText && sub_type &&
+    (sub_type.includes("Стабілізаційне відключення") ||
+     sub_type.includes("стабілізаційн") ||
+     (sub_type.includes("Згідно графіку погодинних") && !sub_type.includes("без застосування")) ||
      sub_type.includes("According to"))
 
   // Check for immediate/emergency outages
-  // If sub_type mentions "hourly schedule", it's NOT an emergency
-  const hasEmergencyOutage = !isScheduledOutageText && (
+  // Emergency if: explicitly marked as emergency OR has emergency fields populated (and not scheduled)
+  const hasEmergencyOutage = (isEmergencyOutageText || !isScheduledOutageText) && (
     (sub_type && sub_type !== "") ||
     (start_date && start_date !== "") ||
     (end_date && end_date !== "") ||
@@ -430,23 +442,47 @@ function detectOutagePassed(currentOutageData) {
 
   const previousData = lastEntry.outageData
 
-  // Check if there was a current outage previously
+  // Priority 1: Check if emergency outage has ended (emergency field disappeared)
+  const hadEmergencyOutage = previousData.emergencyOutage
+  const hasEmergencyOutage = currentOutageData.emergencyOutage
+
+  if (hadEmergencyOutage && !hasEmergencyOutage) {
+    // Don't send if we already sent an outage-passed notification for this emergency
+    if (lastEntry.type === 'outage-passed') {
+      console.log("⏭️ Emergency outage-passed notification already sent")
+      return null
+    }
+
+    console.log("✅ Emergency outage has passed!")
+
+    // Return information about the emergency that passed
+    return {
+      passedOutage: hadEmergencyOutage,
+      isEmergency: true,
+      nextOutage: currentOutageData.nextScheduledOutage?.currentOutage || currentOutageData.nextScheduledOutage?.nextOutage || null,
+      queueGroup: currentOutageData.nextScheduledOutage?.queueGroup || previousData.nextScheduledOutage?.queueGroup
+    }
+  }
+
+  // Priority 2: Check if there was a scheduled current outage previously
   const hadCurrentOutage = previousData.nextScheduledOutage?.currentOutage
   const hasCurrentOutage = currentOutageData.nextScheduledOutage?.currentOutage
 
-  // If we had a current outage before and now we don't, it has passed
-  if (hadCurrentOutage && !hasCurrentOutage) {
+  // If we had a current scheduled outage before and now we don't, it has passed
+  // But only notify if there's no emergency currently active
+  if (hadCurrentOutage && !hasCurrentOutage && !hasEmergencyOutage) {
     // Don't send if we already sent an outage-passed notification for this same outage
     if (lastEntry.type === 'outage-passed') {
       console.log("⏭️ Outage-passed notification already sent for this outage")
       return null
     }
 
-    console.log("✅ Current outage has passed!")
+    console.log("✅ Scheduled outage has passed!")
 
     // Return information about the next outage (if any)
     return {
       passedOutage: hadCurrentOutage,
+      isEmergency: false,
       nextOutage: currentOutageData.nextScheduledOutage?.nextOutage || null,
       queueGroup: currentOutageData.nextScheduledOutage?.queueGroup || previousData.nextScheduledOutage?.queueGroup
     }
@@ -565,7 +601,7 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
     throw Error("❌ Missing telegram bot token or chat id.")
   if (!TELEGRAM_CHAT_ID) throw Error("❌ Missing telegram chat id.")
 
-  const { passedOutage, nextOutage, queueGroup } = passedOutageInfo
+  const { passedOutage, nextOutage, queueGroup, isEmergency } = passedOutageInfo
 
   const now = new Date()
   const time = now.toLocaleTimeString("uk-UA", {
@@ -578,36 +614,108 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
   })
   const updateNotificationTimestamp = `${time} ${date}`
 
-  const passedDuration = calculateOutageDuration(passedOutage.timeRange)
+  const messageParts = []
 
-  const messageParts = [
-    "✅ <b>Відключення завершено!</b>",
-    "",
-    "📊 <b>Черга:</b>",
-    queueGroup,
-    "",
-    "🕐 <b>Завершене відключення:</b>",
-    passedOutage.timeRange,
-    "",
-    "⏱ <b>Тривалість:</b>",
-    passedDuration,
-  ]
+  // Handle emergency outage passed
+  if (isEmergency) {
+    const { sub_type, start_date, end_date } = passedOutage
+
+    // Calculate duration for emergency
+    let duration = ""
+    if (start_date && end_date) {
+      try {
+        const parseDate = (dateStr) => {
+          const [time, date] = dateStr.split(" ")
+          const [hours, minutes] = time.split(":").map(Number)
+          const [day, month, year] = date.split(".").map(Number)
+          return new Date(year, month - 1, day, hours, minutes)
+        }
+
+        const startTime = parseDate(start_date)
+        const endTime = parseDate(end_date)
+        const durationMs = endTime - startTime
+        const hours = Math.floor(durationMs / (1000 * 60 * 60))
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60))
+
+        if (hours > 0 && minutes > 0) {
+          duration = `${hours} год ${minutes} хв`
+        } else if (hours > 0) {
+          duration = `${hours} год`
+        } else {
+          duration = `${minutes} хв`
+        }
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    messageParts.push(
+      "✅ <b>Екстрене відключення завершено!</b>",
+      "",
+      "ℹ️ <b>Тип:</b>",
+      sub_type || "Невідомо",
+      "",
+      "🔴 <b>Початок:</b>",
+      start_date || "Невідомо",
+      "",
+      "🟢 <b>Завершено:</b>",
+      end_date || "Невідомо"
+    )
+
+    if (duration) {
+      messageParts.push(
+        "",
+        "⏱ <b>Тривалість:</b>",
+        duration
+      )
+    }
+  } else {
+    // Handle scheduled outage passed
+    const passedDuration = calculateOutageDuration(passedOutage.timeRange)
+
+    messageParts.push(
+      "✅ <b>Відключення завершено!</b>",
+      "",
+      "📊 <b>Черга:</b>",
+      queueGroup,
+      "",
+      "🕐 <b>Завершене відключення:</b>",
+      passedOutage.timeRange,
+      "",
+      "⏱ <b>Тривалість:</b>",
+      passedDuration
+    )
+  }
 
   // Add next outage information if available
   if (nextOutage) {
-    const nextDuration = calculateOutageDuration(nextOutage.timeRange)
-    messageParts.push(
-      "",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "",
-      "⏰ <b>Наступне відключення</b>",
-      "",
-      "🕐 <b>Час:</b>",
-      nextOutage.timeRange,
-      "",
-      "⏱ <b>Тривалість:</b>",
-      nextDuration
-    )
+    // Check if nextOutage has timeRange (scheduled) or start_date/end_date (emergency)
+    if (nextOutage.timeRange) {
+      const nextDuration = calculateOutageDuration(nextOutage.timeRange)
+      messageParts.push(
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "⏰ <b>Наступне відключення</b>",
+        "",
+        "🕐 <b>Час:</b>",
+        nextOutage.timeRange,
+        "",
+        "⏱ <b>Тривалість:</b>",
+        nextDuration
+      )
+    } else {
+      // It's an emergency-style next outage
+      messageParts.push(
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "⏰ <b>Наступне відключення</b>",
+        "",
+        "🕐 <b>Час:</b>",
+        `${nextOutage.start_date || "Невідомо"} - ${nextOutage.end_date || "Невідомо"}`
+      )
+    }
   } else {
     messageParts.push(
       "",
@@ -685,28 +793,92 @@ async function sendNotification(info, outageData) {
   // Add emergency outage section if exists
   if (emergencyOutage) {
     const { sub_type, start_date, end_date } = emergencyOutage
+
+    // Calculate if outage is currently active
+    const now = new Date()
+    const kyivTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Europe/Kyiv" })
+    )
+
+    // Parse dates to check if outage is active
+    let isActiveNow = false
+    let duration = ""
+
+    if (start_date && end_date) {
+      try {
+        // Parse "07:55 20.01.2026" format
+        const parseDate = (dateStr) => {
+          const [time, date] = dateStr.split(" ")
+          const [hours, minutes] = time.split(":").map(Number)
+          const [day, month, year] = date.split(".").map(Number)
+          return new Date(year, month - 1, day, hours, minutes)
+        }
+
+        const startTime = parseDate(start_date)
+        const endTime = parseDate(end_date)
+        isActiveNow = kyivTime >= startTime && kyivTime < endTime
+
+        // Calculate duration
+        const durationMs = endTime - startTime
+        const hours = Math.floor(durationMs / (1000 * 60 * 60))
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60))
+
+        if (hours > 0 && minutes > 0) {
+          duration = `${hours} год ${minutes} хв`
+        } else if (hours > 0) {
+          duration = `${hours} год`
+        } else {
+          duration = `${minutes} хв`
+        }
+      } catch (error) {
+        // If parsing fails, just skip duration calculation
+      }
+    }
+
     messageParts.push(
-      "🚨 <b>УВАГА! Аварійне відключення!</b>",
+      "🚨🚨🚨 <b>ЕКСТРЕНЕ ВІДКЛЮЧЕННЯ!</b> 🚨🚨🚨",
       "",
-      "ℹ️ <b>Причина:</b>",
-      (sub_type || "Невідома") + ".",
+      isActiveNow ? "⚠️ <b>ЗАРАЗ АКТИВНЕ!</b>" : "⚠️ <b>УВАГА! Аварійне відключення!</b>",
       "",
-      "🔴 <b>Час початку:</b>",
-      start_date || "Невідомий",
+      "ℹ️ <b>Тип:</b>",
+      sub_type || "Невідомо",
       "",
-      "🟢 <b>Час відновлення:</b>",
-      end_date || "Невідомий"
+      "🔴 <b>Початок:</b>",
+      start_date || "Невідомо",
+      "",
+      "🟢 <b>Очікуване відновлення:</b>",
+      end_date || "Невідомо"
+    )
+
+    if (duration) {
+      messageParts.push(
+        "",
+        "⏱ <b>Тривалість:</b>",
+        duration
+      )
+    }
+
+    messageParts.push(
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      ""
     )
   }
 
-  // Add scheduled outage section ONLY if no emergency
-  if (nextScheduledOutage && !emergencyOutage) {
+  // Add scheduled outage section
+  // Show scheduled info even if there's emergency (to show what's coming next)
+  if (nextScheduledOutage) {
     const { queueGroup, currentOutage, nextOutage } = nextScheduledOutage
+
+    // If there's emergency, show scheduled as "what's next"
+    if (emergencyOutage) {
+      messageParts.push("📅 <b>Планові відключення сьогодні:</b>", "")
+    }
 
     messageParts.push("📊 <b>Черга:</b>", queueGroup, "")
 
-    // Show current outage if exists
-    if (currentOutage) {
+    // Show current outage if exists (and no emergency)
+    if (currentOutage && !emergencyOutage) {
       const currentDuration = calculateOutageDuration(currentOutage.timeRange)
       messageParts.push(
         "⚡️ <b>Поточне відключення</b>",
@@ -727,8 +899,9 @@ async function sendNotification(info, outageData) {
     // Show next outage if exists
     if (nextOutage) {
       const nextDuration = calculateOutageDuration(nextOutage.timeRange)
+      const label = emergencyOutage || currentOutage ? "⏰ <b>Наступне відключення</b>" : "⏰ <b>Планове відключення</b>"
       messageParts.push(
-        "⏰ <b>Наступне відключення</b>",
+        label,
         "",
         "🕐 <b>Час:</b>",
         nextOutage.timeRange,
