@@ -1,14 +1,15 @@
 {
-  "timestamp": "2026-01-21T14:29:13.600Z",
-  "hash": "E:06:20 21.01.2026|20:00 21.01.2026",
+  "timestamp": "2026-01-21T18:09:34.744Z",
+  "hash": "E:|Невідомо",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
     "emergencyOutage": {
-      "sub_type": "Екстренні відключення (Аварійне без застосування графіку погодинних відключень)",
-      "start_date": "06:20 21.01.2026",
-      "end_date": "20:00 21.01.2026",
-      "type": "2"
+      "sub_type": "Екстренні відключення електроенергії (системне повідомлення)",
+      "start_date": "",
+      "end_date": "Невідомо",
+      "type": "system-wide",
+      "isSystemWide": true
     },
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
