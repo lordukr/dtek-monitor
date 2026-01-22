@@ -1,24 +1,11 @@
 {
-  "timestamp": "2026-01-21T18:09:34.744Z",
-  "hash": "E:|Невідомо",
+  "timestamp": "2026-01-22T03:09:10.607Z",
+  "hash": "",
   "sent": true,
+  "type": "outage-passed",
   "outageData": {
-    "isOutageDetected": true,
-    "emergencyOutage": {
-      "sub_type": "Екстренні відключення електроенергії (системне повідомлення)",
-      "start_date": "",
-      "end_date": "Невідомо",
-      "type": "system-wide",
-      "isSystemWide": true
-    },
-    "nextScheduledOutage": {
-      "queueGroup": "GPV1.2",
-      "currentOutage": {
-        "timeRange": "13:30-20:30",
-        "description": "Світла не буде другі 30 хв",
-        "status": "second"
-      },
-      "nextOutage": null
-    }
+    "isOutageDetected": false,
+    "emergencyOutage": null,
+    "nextScheduledOutage": null
   }
 }
