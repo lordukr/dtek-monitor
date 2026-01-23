@@ -1,23 +1,23 @@
 {
-  "timestamp": "2026-01-23T13:13:06.827Z",
-  "hash": "E:07:30 23.01.2026|18:30 23.01.2026",
+  "timestamp": "2026-01-23T14:14:49.227Z",
+  "hash": "E:16:00 23.01.2026|20:00 23.01.2026",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
     "emergencyOutage": {
       "sub_type": "Екстренні відключення (Аварійне без застосування графіку погодинних відключень)",
-      "start_date": "07:30 23.01.2026",
-      "end_date": "18:30 23.01.2026",
+      "start_date": "16:00 23.01.2026",
+      "end_date": "20:00 23.01.2026",
       "type": "2"
     },
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
-      "currentOutage": null,
-      "nextOutage": {
+      "currentOutage": {
         "timeRange": "16:00-22:00",
         "description": "Світла немає",
         "status": "no"
-      }
+      },
+      "nextOutage": null
     }
   }
 }
