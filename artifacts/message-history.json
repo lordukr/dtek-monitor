@@ -1,10 +1,16 @@
 {
-  "timestamp": "2026-01-26T07:03:07.513Z",
-  "hash": "S:GPV1.2|C:09:00-16:00|N:19:30-24:00",
+  "timestamp": "2026-01-26T08:16:53.291Z",
+  "hash": "E:|Невідомо",
   "sent": true,
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": null,
+    "emergencyOutage": {
+      "sub_type": "Екстренні відключення електроенергії (системне повідомлення)",
+      "start_date": "",
+      "end_date": "Невідомо",
+      "type": "system-wide",
+      "isSystemWide": true
+    },
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
       "currentOutage": {
