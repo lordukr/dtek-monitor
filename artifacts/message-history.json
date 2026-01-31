@@ -1,15 +1,11 @@
 {
-  "timestamp": "2026-01-31T13:11:26.380Z",
-  "hash": "E:04:37 31.01.2026|18:29 31.01.2026",
+  "timestamp": "2026-01-31T13:52:09.336Z",
+  "hash": "S:GPV1.2|C:15:00-22:00",
   "sent": true,
+  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
-    "emergencyOutage": {
-      "sub_type": "Екстренні відключення (Аварійне без застосування графіку погодинних відключень)",
-      "start_date": "04:37 31.01.2026",
-      "end_date": "18:29 31.01.2026",
-      "type": "2"
-    },
+    "emergencyOutage": null,
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
       "currentOutage": {
