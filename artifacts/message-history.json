@@ -1,16 +1,19 @@
 {
-  "timestamp": "2026-02-26T22:55:29.643Z",
-  "hash": "S:GPV1.2|N:08:00-14:30",
+  "timestamp": "2026-02-27T06:29:18.544Z",
+  "hash": "S:GPV1.2|C:08:00-14:30|N:18:00-21:30",
   "sent": true,
-  "type": "outage-passed",
   "outageData": {
     "isOutageDetected": true,
     "emergencyOutage": null,
     "nextScheduledOutage": {
       "queueGroup": "GPV1.2",
-      "currentOutage": null,
-      "nextOutage": {
+      "currentOutage": {
         "timeRange": "08:00-14:30",
+        "description": "Світла немає",
+        "status": "no"
+      },
+      "nextOutage": {
+        "timeRange": "18:00-21:30",
         "description": "Світла немає",
         "status": "no"
       }
