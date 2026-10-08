@@ -4,12 +4,12 @@
 DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian electricity provider) that sends notifications to Telegram when power outages are detected.
 
 ## Key Features
-- Monitors DTEK website for power outages every 10 minutes via GitHub Actions
+- Monitors DTEK website for power outages every 10 minutes (Docker on VPS, supercronic)
 - Sends notifications to Telegram when outages are detected
 - Sends separate messages per event: new outage, outage passed, outage cancelled, emergency outage
 - After each event message sends a silent "last status check: HH:MM" message; the previous one is deleted so it is always the last message; runs with no changes edit it (id stored as `statusMessageId` in history)
 - Displays outage reason, start time, and expected restoration time
-- Stores state in artifacts committed to repository
+- Stores state in artifacts/message-history.json on the host where it runs (VPS bind mount); not tracked or committed to git
 
 ## Architecture
 
@@ -17,16 +17,17 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 1. **monitor.js** - Main monitoring script
 2. **daily-summary.js** - Daily morning summary (GitHub Actions 00:10 UTC; Docker 00:05 Kyiv)
 3. **lib/** - Shared modules (`lib/dtek.js` DTEK scraping, `lib/telegram.js` Telegram API)
-4. **GitHub Actions workflows** - Automated execution every 10 minutes (`monitor.yml`) and daily (`daily-summary.yml`)
+4. **GitHub Actions workflows** - Manual `workflow_dispatch` only (`monitor.yml`, `daily-summary.yml`); stateless there, so for testing only
 5. **Docker** - Single container with supercronic scheduler (`crontab`, `Dockerfile`, `docker-compose.yml`)
 6. **Telegram Bot** - Notification delivery
-7. **Artifacts** - State persistence (`artifacts/message-history.json`)
+7. **Artifacts** - State persistence (`artifacts/message-history.json`, git-ignored, lives only where the bot runs; in production the VPS bind mount)
 8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
-9. **Tests** - `monitor.test.js`, `daily-summary.test.js` (run with `npm test`)
+9. **Tests** - `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` (run with `npm test`)
 
 ### Technology Stack
-- Node.js (v20.19.0+)
-- Playwright (for web scraping)
+- Node.js 22 (see `.nvmrc`; engines `>=22`)
+- impit (HTTP client with Chrome TLS fingerprint) + tough-cookie (cookie jar) for web scraping; no browser in production
+- Playwright: devDependency used only by `scripts/` (run `npm install` and `npx playwright install chromium` first)
 - dotenv (environment configuration)
 - Telegram Bot API
 
@@ -40,20 +41,19 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 **Note**: The .env file should be ignored in all operations per user request.
 
 ## Workflow
-1. Script uses Playwright to fetch DTEK website data
+1. Script uses impit + tough-cookie (no browser) to fetch DTEK website data
 2. Makes AJAX request with address details to get outage information
-3. Checks if there's an active power outage
+3. Checks if there's an active power outage (emergency = `#modal-attention` popup block containing the stem `екстрен`, case-insensitive)
 4. If outage detected, sends/updates Telegram notification
-5. Saves message history to artifacts/message-history.json
-6. GitHub Actions commits artifacts back to repository
+5. Saves message history to artifacts/message-history.json (local only, not committed)
 
 ## Important Files
 - `monitor.js` - Main monitoring logic
 - `.github/workflows/monitor.yml` - CI/CD workflow
 - `daily-summary.js`, `lib/` - Daily summary and shared modules
-- `artifacts/message-history.json` - Stores sent message history (state)
+- `artifacts/message-history.json` - Stores last sent message (state); git-ignored, exists only where the bot runs
 - `scripts/` - Debug/preview scripts
-- `monitor.test.js`, `daily-summary.test.js` - Tests
+- `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` - Tests
 - `crontab`, `Dockerfile`, `docker-compose.yml` - Docker deployment
 - `package.json` - Dependencies and project metadata
 - `.env.example` - Environment variables template
