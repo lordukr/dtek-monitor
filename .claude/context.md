@@ -21,10 +21,10 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 6. **Telegram Bot** - Notification delivery
 7. **Artifacts** - State persistence (`artifacts/message-history.json`)
 8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
-9. **Tests** - `monitor.test.js`, `daily-summary.test.js` (run with `npm test`)
+9. **Tests** - `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` (run with `npm test`)
 
 ### Technology Stack
-- Node.js (v20.19.0+)
+- Node.js 22 (see `.nvmrc`; engines `>=22`)
 - impit (HTTP client with Chrome TLS fingerprint) + tough-cookie (cookie jar) for web scraping; no browser in production
 - Playwright: devDependency used only by `scripts/` (run `npm install` and `npx playwright install chromium` first)
 - dotenv (environment configuration)
@@ -53,7 +53,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 - `daily-summary.js`, `lib/` - Daily summary and shared modules
 - `artifacts/message-history.json` - Stores sent message history (state)
 - `scripts/` - Debug/preview scripts
-- `monitor.test.js`, `daily-summary.test.js` - Tests
+- `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` - Tests
 - `crontab`, `Dockerfile`, `docker-compose.yml` - Docker deployment
 - `package.json` - Dependencies and project metadata
 - `.env.example` - Environment variables template

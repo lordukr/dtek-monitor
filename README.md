@@ -104,7 +104,7 @@ node monitor.js
 # Ранкове повідомлення (автоматично: ~02:10–03:10 за Києвом на GitHub Actions, 00:05 у Docker)
 node daily-summary.js
 
-# Юніт-тести (monitor.test.js, daily-summary.test.js)
+# Юніт-тести (monitor.test.js, daily-summary.test.js, dtek.test.js)
 npm test
 ```
 
