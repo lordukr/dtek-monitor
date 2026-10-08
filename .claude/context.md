@@ -25,7 +25,8 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 
 ### Technology Stack
 - Node.js (v20.19.0+)
-- Playwright (for web scraping)
+- impit (HTTP client with Chrome TLS fingerprint) + tough-cookie (cookie jar) for web scraping; no browser in production
+- Playwright: devDependency used only by `scripts/` (run `npm install` and `npx playwright install chromium` first)
 - dotenv (environment configuration)
 - Telegram Bot API
 
@@ -39,9 +40,9 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 **Note**: The .env file should be ignored in all operations per user request.
 
 ## Workflow
-1. Script uses Playwright to fetch DTEK website data
+1. Script uses impit + tough-cookie (no browser) to fetch DTEK website data
 2. Makes AJAX request with address details to get outage information
-3. Checks if there's an active power outage
+3. Checks if there's an active power outage (emergency = `#modal-attention` popup block containing the stem `екстрен`, case-insensitive)
 4. If outage detected, sends/updates Telegram notification
 5. Saves message history to artifacts/message-history.json
 6. GitHub Actions commits artifacts back to repository
