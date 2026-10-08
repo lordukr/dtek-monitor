@@ -4,9 +4,7 @@ services:
     build: .
     container_name: dtek-monitor
     restart: unless-stopped
-    # Chromium потребує більше /dev/shm, ніж 64MB за замовчуванням
-    shm_size: "1gb"
-    # tini прибирає zombie-процеси Chromium після кожного запуску
+    # tini як PID 1: коректна передача сигналів і прибирання зомбі-процесів supercronic
     init: true
     logging:
       driver: json-file
