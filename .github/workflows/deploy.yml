@@ -1,0 +1,97 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "scripts/**"
+      - "artifacts/**"
+  workflow_dispatch:
+
+# Деплої йдуть строго по черзі, без скасування активного
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_DIR: /opt/dtek-monitor
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Sync files
+        # .env та artifacts/ живуть тільки на сервері — не перезаписуємо і не видаляємо їх
+        run: |
+          rsync -az --delete \
+            --exclude ".git/" \
+            --exclude "node_modules/" \
+            --exclude ".env" \
+            --exclude ".env.*" \
+            --exclude "artifacts/" \
+            ./ vps:"$APP_DIR"/
+
+      - name: Build and restart container
+        run: |
+          ssh vps "cd $APP_DIR && docker compose up -d --build --remove-orphans && docker image prune -f"
+
+      - name: Health check
+        run: |
+          ssh vps 'set -e
+            for i in $(seq 1 12); do
+              status=$(docker inspect -f "{{.State.Status}}" dtek-monitor 2>/dev/null || true)
+              [ "$status" = "running" ] && break
+              sleep 5
+            done
+            [ "$status" = "running" ] || { echo "Container is not running: $status"; docker logs --tail 50 dtek-monitor; exit 1; }
+            # Перевіряємо, що код завантажується всередині образу (без запитів до ДТЕК/Telegram)
+            docker exec dtek-monitor node -e "require(\"./monitor.js\"); require(\"./daily-summary.js\"); console.log(\"✅ modules load\")"
+            docker exec dtek-monitor test -w /app/artifacts
+            echo "✅ Deployed $(docker inspect -f "{{.Created}}" dtek-monitor)"'
