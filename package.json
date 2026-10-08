@@ -5,12 +5,13 @@
   "main": "monitor.js",
   "type": "commonjs",
   "scripts": {
-    "test": "node --test monitor.test.js daily-summary.test.js",
-    "test:watch": "node --test --watch monitor.test.js daily-summary.test.js"
+    "test": "node --test monitor.test.js daily-summary.test.js dtek.test.js",
+    "test:watch": "node --test --watch monitor.test.js daily-summary.test.js dtek.test.js"
   },
   "dependencies": {
     "dotenv": "^17.2.1",
-    "playwright": "^1.55.0"
+    "impit": "^0.14.5",
+    "tough-cookie": "^6.0.2"
   },
   "engines": {
     "node": ">=22"
@@ -24,5 +25,8 @@
     "dtek"
   ],
   "author": "Bohdan Yatsenko",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
 }

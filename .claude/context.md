@@ -21,11 +21,12 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 6. **Telegram Bot** - Notification delivery
 7. **Artifacts** - State persistence (`artifacts/message-history.json`)
 8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
-9. **Tests** - `monitor.test.js`, `daily-summary.test.js` (run with `npm test`)
+9. **Tests** - `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` (run with `npm test`)
 
 ### Technology Stack
-- Node.js (v20.19.0+)
-- Playwright (for web scraping)
+- Node.js 22 (see `.nvmrc`; engines `>=22`)
+- impit (HTTP client with Chrome TLS fingerprint) + tough-cookie (cookie jar) for web scraping; no browser in production
+- Playwright: devDependency used only by `scripts/` (run `npm install` and `npx playwright install chromium` first)
 - dotenv (environment configuration)
 - Telegram Bot API
 
@@ -39,9 +40,9 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 **Note**: The .env file should be ignored in all operations per user request.
 
 ## Workflow
-1. Script uses Playwright to fetch DTEK website data
+1. Script uses impit + tough-cookie (no browser) to fetch DTEK website data
 2. Makes AJAX request with address details to get outage information
-3. Checks if there's an active power outage
+3. Checks if there's an active power outage (emergency = `#modal-attention` popup block containing the stem `екстрен`, case-insensitive)
 4. If outage detected, sends/updates Telegram notification
 5. Saves message history to artifacts/message-history.json
 6. GitHub Actions commits artifacts back to repository
@@ -52,7 +53,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 - `daily-summary.js`, `lib/` - Daily summary and shared modules
 - `artifacts/message-history.json` - Stores sent message history (state)
 - `scripts/` - Debug/preview scripts
-- `monitor.test.js`, `daily-summary.test.js` - Tests
+- `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` - Tests
 - `crontab`, `Dockerfile`, `docker-compose.yml` - Docker deployment
 - `package.json` - Dependencies and project metadata
 - `.env.example` - Environment variables template
