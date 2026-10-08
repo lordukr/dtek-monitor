@@ -91,7 +91,7 @@ docker exec dtek-monitor node daily-summary.js
 docker compose ps
 docker compose logs --tail=50 -f
 
-# Історія надісланих повідомлень
+# Стан бота (останнє надіслане повідомлення; лише на хості, не в git)
 cat artifacts/message-history.json
 ```
 
@@ -125,11 +125,11 @@ docker exec dtek-monitor ps aux | grep supercronic
 
 ## 📦 Збереження даних
 
-Артефакти (`message-history.json`) зберігаються в `./artifacts` через bind mount, тому не втрачаються при перезапуску чи `docker compose down`. Директорія має бути доступна для запису користувачу `pwuser` (uid 1001 в образі); на Linux перед першим запуском виконайте `sudo chown -R 1001:1001 artifacts`.
+Стан бота (`message-history.json`) зберігається в `./artifacts` через bind mount, тому не втрачається при перезапуску чи `docker compose down`. Файл не відстежується git: єдина копія - на хості, де працює контейнер (деплой через `deploy.yml` виключає `artifacts/` з rsync, тому не перезаписує і не видаляє її). Якщо файл зникне або пошкодиться, бот створить його заново після наступного сповіщення (можливе одне повторне повідомлення). Директорія має бути доступна для запису користувачу `pwuser` (uid 1001 в образі); на Linux перед першим запуском виконайте `mkdir -p artifacts && sudo chown -R 1001:1001 artifacts`.
 
 ## 🔄 Міграція з GitHub Actions
 
-1. Скопіюйте `artifacts/message-history.json` з репозиторію в локальну директорію `artifacts/`.
+1. (Необов'язково) Щоб зберегти стан з часів GitHub Actions, відновіть файл з історії git (потрібен повний, не shallow, клон репозиторію): `mkdir -p artifacts && git show $(git rev-list -n 1 HEAD -- artifacts/message-history.json)^:artifacts/message-history.json > artifacts/message-history.json && sudo chown -R 1001:1001 artifacts`. Якщо Docker працює на іншому сервері, скопіюйте отриманий файл у `artifacts/` на сервері. Інакше файл буде створено автоматично після першого надісланого сповіщення.
 2. Вимкніть GitHub Actions workflows (`monitor.yml`, `daily-summary.yml`), щоб не було дублювання повідомлень.
 3. Запустіть Docker setup.
 
@@ -141,7 +141,7 @@ docker exec dtek-monitor ps aux | grep supercronic
 | Вартість | Безкоштовно | Ресурси вашого сервера |
 | Точність розкладу | Cron може запізнюватись | Точно за crontab |
 | Налаштування | Через secrets | Через .env |
-| Стан | Git commits | Локальні файли |
+| Стан | Не зберігається між запусками | Локальний файл (bind mount) |
 
 ## 📝 Примітки
 
