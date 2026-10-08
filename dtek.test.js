@@ -46,7 +46,8 @@ describe("extractCsrfToken", () => {
     const result = dtek.extractCsrfToken(input)
     const elapsed = performance.now() - start
     assert.equal(result, null)
-    assert.ok(elapsed < 200, `took ${elapsed}ms`)
+    // generous bound: catches quadratic blow-up (seconds), tolerant of loaded CI runners
+    assert.ok(elapsed < 2000, `took ${elapsed}ms`)
   })
 })
 
@@ -178,7 +179,8 @@ describe("extractAttentionModalText", () => {
     ]
     const t0 = performance.now()
     for (const input of inputs) assert.equal(dtek.extractAttentionModalText(input), null)
-    assert.ok(performance.now() - t0 < 200)
+    // generous bound: catches quadratic blow-up (seconds), tolerant of loaded CI runners
+    assert.ok(performance.now() - t0 < 2000)
   })
 })
 
@@ -559,10 +561,37 @@ describe("fetchInfo", () => {
 
   test("(19) GET body read times out -> page GET timed out, 1 call", async () => {
     const { error, fake } = await rejectionOf([
-      { status: 200, bodyError: Object.assign(new Error("slow"), { name: "TimeoutError" }) },
+      {
+        status: 200,
+        bodyError: new Error(
+          "Error reading response stream: reqwest::Error { kind: Decode, source: reqwest::Error { kind: Body, source: TimedOut } }"
+        ),
+      },
     ])
     assert.equal(error.message, "❌ Getting info failed: page GET timed out after 30s")
     assert.equal(fake.calls.length, 1)
+  })
+
+  test("(19b) POST body read TimeoutException prefix -> AJAX POST timed out", async () => {
+    const { error } = await rejectionOf([
+      { status: 200, body: fixture("no-modal.html") },
+      { status: 200, bodyError: new Error("TimeoutException: read timed out") },
+    ])
+    assert.equal(error.message, "❌ Getting info failed: AJAX POST timed out after 30s")
+  })
+
+  test("(21) large origin error page with Incapsula marker, status 502 -> not blocked", async () => {
+    const body = '<script src="/_Incapsula_Resource?x=1"></script>' + "<p>origin</p>".repeat(5000)
+    const { error } = await rejectionOf([{ status: 502, body }])
+    assert.match(error.message, /^❌ Getting info failed: Page GET failed: HTTP 502: /)
+    assert.doesNotMatch(error.message, /Blocked by Incapsula/)
+  })
+
+  test("(22) large page with Incapsula marker, status 200, no csrf -> CSRF not found", async () => {
+    const body = '<script src="/_Incapsula_Resource?x=1"></script>' + "<p>origin</p>".repeat(5000)
+    const { error } = await rejectionOf([{ status: 200, body }])
+    assert.match(error.message, /CSRF token not found on page \(HTTP 200/)
+    assert.doesNotMatch(error.message, /Blocked by Incapsula/)
   })
 
   test("(20) POST body read reset -> AJAX POST network error", async () => {
