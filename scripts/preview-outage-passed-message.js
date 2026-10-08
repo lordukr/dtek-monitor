@@ -130,8 +130,9 @@ function formatEmergencyOutagePassedMessage(passedOutageInfo, updateTimestamp) {
     "",
     "⏰ Час оновлення інформації:",
     updateTimestamp || updateNotificationTimestamp,
-    "⏰ Час оновлення повідомлення:",
-    updateNotificationTimestamp
+    "",
+    // "HH:MM DD.MM.YYYY" -> "HH:MM"
+    `🔄 Оновлено о ${updateNotificationTimestamp.split(" ")[0]}`
   )
 
   return messageParts.join("\n")
