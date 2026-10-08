@@ -379,3 +379,220 @@ describe("parseAjaxResponse", () => {
     assert.equal(dtek.excerpt, undefined)
   })
 })
+
+const PAGE_URL_LITERAL = "https://www.dtek-krem.com.ua/ua/shutdowns"
+const AJAX_URL_LITERAL = "https://www.dtek-krem.com.ua/ua/ajax"
+const ERR_PREFIX = "❌ Getting info failed: "
+const FIXED = new Date(2026, 9, 8, 13, 59, 15)
+const ADDRESS = { city: "м. Тест", street: "вул. Тестова" }
+
+function makeFake(queue) {
+  const fake = {
+    calls: [],
+    fetch: async (url, init) => {
+      fake.calls.push({ url, init })
+      const r = queue.shift()
+      if (r instanceof Error) throw r
+      return {
+        status: r.status,
+        text: async () => {
+          if (r.bodyError) throw r.bodyError
+          return r.body
+        },
+      }
+    },
+  }
+  return fake
+}
+
+async function rejectionOf(queue, options = {}) {
+  const fake = makeFake(queue)
+  const error = await dtek.fetchInfo(ADDRESS, { client: fake, now: () => FIXED, ...options }).then(
+    () => assert.fail("expected fetchInfo to reject"),
+    (e) => e
+  )
+  assert.ok(error.message.startsWith(ERR_PREFIX), error.message)
+  assert.equal(error.message.split(ERR_PREFIX).length, 2)
+  assert.ok(!error.message.includes("\n"), "message must be single-line")
+  return { error, fake }
+}
+
+const ajaxOk = () => ({ status: 200, body: fixture("ajax-sample.json") })
+
+describe("fetchInfo", () => {
+  test("(1) resolves to AJAX JSON plus hasSystemWideEmergency true; exact calls", async () => {
+    const fake = makeFake([{ status: 200, body: fixture("emergency-new.html") }, ajaxOk()])
+    const info = await dtek.fetchInfo(ADDRESS, { client: fake, now: () => FIXED })
+    const sample = JSON.parse(fixture("ajax-sample.json"))
+    for (const key of Object.keys(sample)) assert.deepEqual(info[key], sample[key], key)
+    assert.equal(info.hasSystemWideEmergency, true)
+    assert.equal(fake.calls.length, 2)
+    assert.equal(fake.calls[0].url, PAGE_URL_LITERAL)
+    assert.deepEqual(fake.calls[0].init, {
+      method: "GET",
+      headers: { "Accept-Language": "uk-UA" },
+      timeout: 30000,
+    })
+    assert.equal(fake.calls[1].url, AJAX_URL_LITERAL)
+    assert.deepEqual(fake.calls[1].init, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "x-requested-with": "XMLHttpRequest",
+        "x-csrf-token": "test-csrf-token_AbC-123==",
+      },
+      body: dtek.buildAjaxBody({ ...ADDRESS, updateFact: FIXED.toLocaleString("uk-UA") }),
+      timeout: 30000,
+    })
+  })
+
+  test("(2) no-modal page -> hasSystemWideEmergency false", async () => {
+    const fake = makeFake([{ status: 200, body: fixture("no-modal.html") }, ajaxOk()])
+    const info = await dtek.fetchInfo(ADDRESS, { client: fake, now: () => FIXED })
+    assert.equal(info.hasSystemWideEmergency, false)
+    assert.equal(fake.calls.length, 2)
+  })
+
+  test("(3) timeoutMs 5000 is passed to both requests", async () => {
+    const fake = makeFake([{ status: 200, body: fixture("emergency-new.html") }, ajaxOk()])
+    await dtek.fetchInfo(ADDRESS, { client: fake, now: () => FIXED, timeoutMs: 5000 })
+    assert.equal(fake.calls.length, 2)
+    assert.equal(fake.calls[0].init.timeout, 5000)
+    assert.equal(fake.calls[1].init.timeout, 5000)
+  })
+
+  test("(4) GET 200 Incapsula challenge -> blocked, no POST", async () => {
+    const { error, fake } = await rejectionOf([{ status: 200, body: fixture("incapsula-challenge.html") }])
+    assert.match(error.message, /^❌ Getting info failed: Blocked by Incapsula on page GET \(HTTP 200, \d+ bytes\)/)
+    assert.equal(fake.calls.length, 1)
+  })
+
+  test("(5) GET 403 Incapsula block -> blocked with incident ID", async () => {
+    const { error } = await rejectionOf([{ status: 403, body: fixture("incapsula-block.html") }])
+    assert.match(error.message, /Blocked by Incapsula on page GET \(HTTP 403/)
+    assert.ok(error.message.includes("; incident ID 0-0"), error.message)
+  })
+
+  test("(6) GET 503 Incapsula challenge -> Incapsula wins over status", async () => {
+    const { error } = await rejectionOf([{ status: 503, body: fixture("incapsula-challenge.html") }])
+    assert.match(error.message, /Blocked by Incapsula/)
+  })
+
+  test("(7) GET 503 plain body -> Page GET failed with 500-char excerpt", async () => {
+    const { error } = await rejectionOf([{ status: 503, body: "e".repeat(500) + "f".repeat(500) }])
+    assert.ok(error.message.endsWith("Page GET failed: HTTP 503: " + "e".repeat(500)), error.message)
+  })
+
+  test("(8) GET 200 without token or Incapsula -> CSRF token not found", async () => {
+    const { error } = await rejectionOf([{ status: 200, body: "<html><body>ok</body></html>" }])
+    assert.match(error.message, /CSRF token not found on page \(HTTP 200, 28 bytes\)$/)
+    assert.doesNotMatch(error.message, /Incapsula/)
+  })
+
+  test("(9) POST 400 -> AJAX POST failed with 500-char excerpt", async () => {
+    const { error } = await rejectionOf([
+      { status: 200, body: fixture("no-modal.html") },
+      { status: 400, body: "a".repeat(500) + "b".repeat(500) },
+    ])
+    assert.ok(error.message.endsWith("AJAX POST failed: HTTP 400: " + "a".repeat(500)), error.message)
+  })
+
+  test("(10) POST 200 non-JSON -> AJAX POST returned non-JSON", async () => {
+    const { error } = await rejectionOf([
+      { status: 200, body: fixture("no-modal.html") },
+      { status: 200, body: "c".repeat(1000) },
+    ])
+    assert.ok(
+      error.message.endsWith("AJAX POST returned non-JSON (HTTP 200): " + "c".repeat(500)),
+      error.message
+    )
+  })
+
+  test("(16) GET 502 with control characters -> sanitized single-line excerpt", async () => {
+    const { error } = await rejectionOf([{ status: 502, body: "x\ny\u001b[31mz" }])
+    assert.ok(error.message.endsWith("Page GET failed: HTTP 502: x y [31mz"), error.message)
+  })
+
+  test("(17) GET 200 oversized body -> rejected before parsing, 1 call", async () => {
+    const { error, fake } = await rejectionOf([{ status: 200, body: "x".repeat(5000001) }])
+    assert.match(error.message, /Page GET returned oversized body \(HTTP 200, 5000001 chars\)/)
+    assert.equal(fake.calls.length, 1)
+  })
+
+  test("(18) page title is appended to Incapsula and CSRF reasons", async () => {
+    const blocked = await rejectionOf([
+      {
+        status: 200,
+        body: '<html><head><title>Access\ndenied</title></head><script src="/_Incapsula_Resource?x=1"></script></html>',
+      },
+    ])
+    assert.ok(blocked.error.message.includes("; title: Access denied"), blocked.error.message)
+    const maintenance = await rejectionOf([{ status: 200, body: "<title>Maintenance</title>" }])
+    assert.match(
+      maintenance.error.message,
+      /CSRF token not found on page \(HTTP 200, \d+ bytes\); title: Maintenance$/
+    )
+  })
+
+  test("(11) GET TimeoutError -> page GET timed out, 1 call", async () => {
+    const { error, fake } = await rejectionOf([
+      Object.assign(new Error("x"), { name: "TimeoutError" }),
+    ])
+    assert.equal(error.message, "❌ Getting info failed: page GET timed out after 30s")
+    assert.equal(fake.calls.length, 1)
+  })
+
+  test("(12) POST ReadTimeout subclass -> AJAX POST timed out", async () => {
+    class ReadTimeout extends Error {}
+    const err = new ReadTimeout("read")
+    assert.equal(err.name, "Error")
+    const { error } = await rejectionOf([{ status: 200, body: fixture("no-modal.html") }, err])
+    assert.equal(error.message, "❌ Getting info failed: AJAX POST timed out after 30s")
+  })
+
+  test("(13) GET generic error -> page GET network error with cause chain", async () => {
+    const boom = new Error("boom")
+    const { error } = await rejectionOf([boom])
+    assert.equal(error.message, "❌ Getting info failed: page GET network error (Error): boom")
+    assert.equal(error.cause.cause, boom)
+  })
+
+  test("(19) GET body read times out -> page GET timed out, 1 call", async () => {
+    const { error, fake } = await rejectionOf([
+      { status: 200, bodyError: Object.assign(new Error("slow"), { name: "TimeoutError" }) },
+    ])
+    assert.equal(error.message, "❌ Getting info failed: page GET timed out after 30s")
+    assert.equal(fake.calls.length, 1)
+  })
+
+  test("(20) POST body read reset -> AJAX POST network error", async () => {
+    const { error } = await rejectionOf([
+      { status: 200, body: fixture("no-modal.html") },
+      { status: 200, bodyError: new Error("reset") },
+    ])
+    assert.equal(error.message, "❌ Getting info failed: AJAX POST network error (Error): reset")
+  })
+})
+
+describe("module guard", () => {
+  test("(14) requiring lib/dtek loads neither impit nor playwright", () => {
+    const loaded = Object.keys(require.cache).filter((k) =>
+      /node_modules[\\/](impit|playwright)[\\/]/.test(k)
+    )
+    assert.deepEqual(loaded, [])
+  })
+
+  test("(15) getInfo arity is 1 and exactly 8 exports", () => {
+    assert.equal(dtek.getInfo.length, 1)
+    assert.deepEqual(Object.keys(dtek).sort(), [
+      "buildAjaxBody",
+      "detectSystemWideEmergency",
+      "extractAttentionModalText",
+      "extractCsrfToken",
+      "fetchInfo",
+      "getInfo",
+      "isIncapsulaChallenge",
+      "parseAjaxResponse",
+    ])
+  })
+})
