@@ -125,11 +125,11 @@ docker exec dtek-monitor ps aux | grep supercronic
 
 ## 📦 Збереження даних
 
-Стан бота (`message-history.json`) зберігається в `./artifacts` через bind mount, тому не втрачається при перезапуску чи `docker compose down`. Файл не відстежується git: єдина копія - на хості, де працює контейнер (деплой через `deploy.yml` виключає `artifacts/` з rsync, тому не перезаписує і не видаляє її). Якщо файл зникне або пошкодиться, бот створить його заново після наступного сповіщення (можливе одне повторне повідомлення). Директорія має бути доступна для запису користувачу `pwuser` (uid 1001 в образі); на Linux перед першим запуском виконайте `mkdir -p artifacts && sudo chown -R 1001:1001 artifacts`.
+Стан бота (`message-history.json`) зберігається в `./artifacts` через bind mount, тому не втрачається при перезапуску чи `docker compose down`. Файл не відстежується git: єдина копія - на хості, де працює контейнер (деплой через `deploy.yml` виключає `artifacts/` з rsync, тому не перезаписує і не видаляє її). Якщо файл зникне або пошкодиться, бот створить його заново під час наступного запуску; до того можливе одне повторне сповіщення, а повідомлення «відключення минуло» / «відключення скасовано» для поточного відключення може не надійти. Директорія має бути доступна для запису користувачу `pwuser` (uid 1001 в образі); на Linux перед першим запуском виконайте `mkdir -p artifacts && sudo chown -R 1001:1001 artifacts`.
 
 ## 🔄 Міграція з GitHub Actions
 
-1. (Необов'язково) Щоб зберегти стан з часів GitHub Actions, відновіть файл з історії git (потрібен повний, не shallow, клон репозиторію): `mkdir -p artifacts && git show $(git rev-list -n 1 HEAD -- artifacts/message-history.json)^:artifacts/message-history.json > artifacts/message-history.json && sudo chown -R 1001:1001 artifacts`. Якщо Docker працює на іншому сервері, скопіюйте отриманий файл у `artifacts/` на сервері. Інакше файл буде створено автоматично після першого надісланого сповіщення.
+1. (Необов'язково) Перенесіть стан з GitHub Actions. Якщо у вашому клоні ще є `artifacts/message-history.json` (до цієї версії файл відстежувався git), скопіюйте його в `artifacts/` на сервері. Інакше знайдіть потрібну версію в історії git (`git log --format='%h %ad' -- artifacts/message-history.json`) і збережіть її: `git show <commit>:artifacts/message-history.json > message-history.json`, після чого скопіюйте файл у `artifacts/` на сервері. Якщо пропустити цей крок, файл буде створено автоматично під час першого запуску.
 2. Вимкніть GitHub Actions workflows (`monitor.yml`, `daily-summary.yml`), щоб не було дублювання повідомлень.
 3. Запустіть Docker setup.
 

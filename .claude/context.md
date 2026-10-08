@@ -19,7 +19,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 4. **GitHub Actions workflows** - Manual `workflow_dispatch` only (`monitor.yml`, `daily-summary.yml`); stateless there, so for testing only
 5. **Docker** - Single container with supercronic scheduler (`crontab`, `Dockerfile`, `docker-compose.yml`)
 6. **Telegram Bot** - Notification delivery
-7. **Artifacts** - State persistence (`artifacts/message-history.json`, git-ignored, lives only on the VPS bind mount)
+7. **Artifacts** - State persistence (`artifacts/message-history.json`, git-ignored, lives only where the bot runs; in production the VPS bind mount)
 8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
 9. **Tests** - `monitor.test.js`, `daily-summary.test.js` (run with `npm test`)
 
