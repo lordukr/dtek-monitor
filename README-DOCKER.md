@@ -20,8 +20,6 @@
 
 ### 1. Створення `.env` файлу
 
-Створіть файл `.env` в кореневій директорії проєкту:
-
 ```env
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 TELEGRAM_CHAT_ID=-12346789
@@ -33,192 +31,119 @@ HOUSE=1
 ### 2. Запуск
 
 ```bash
-# Збудувати та запустити контейнери
-docker-compose up -d
+# Збудувати та запустити контейнер
+docker compose up -d --build
 
 # Переглянути логи
-docker-compose logs -f
-
-# Переглянути логи тільки монітора
-docker-compose logs -f monitor
-
-# Переглянути логи тільки планувальника
-docker-compose logs -f scheduler
+docker compose logs -f
 ```
 
 ### 3. Зупинка
 
 ```bash
-# Зупинити контейнери
-docker-compose down
-
-# Зупинити та видалити всі дані
-docker-compose down -v
+docker compose down
 ```
 
-## 🏗️ Архітектура Docker Setup
+## 🏗️ Архітектура
 
-### Сервіси
+Один контейнер `dtek-monitor` (образ Playwright + Node.js). Планувальник [supercronic](https://github.com/aptible/supercronic) (версія зафіксована в `Dockerfile`, перевіряється SHA1) працює всередині контейнера від імені non-root користувача `pwuser` і запускає завдання за файлом `crontab`. Docker socket не потрібен.
 
-1. **monitor** - Основний контейнер з Node.js та Playwright
-   - Містить код додатку
-   - Зберігає артефакти в `./artifacts`
-   - Виконує моніторинг за командою від scheduler
+Розклад за замовчуванням (часовий пояс `Europe/Kyiv`, змінна `TZ`):
 
-2. **scheduler** - Контейнер з cron планувальником
-   - Запускає `monitor` кожні 10 хвилин
-   - Використовує Docker socket для виконання команд
+- `node monitor.js` - кожні 10 хвилин
+- `node daily-summary.js` - щодня о 00:05
 
 ### Файли
 
-- **Dockerfile** - Образ для монітора з Playwright
-- **docker-compose.yml** - Оркестрація сервісів
-- **.dockerignore** - Виключення файлів з образу
-- **.env** - Конфігурація (не комітиться)
+- **Dockerfile** - образ з Playwright, supercronic і кодом (`monitor.js`, `daily-summary.js`, `lib/`)
+- **crontab** - розклад завдань
+- **docker-compose.yml** - опис сервісу
+- **.dockerignore** - виключення файлів з образу
+- **.env** - конфігурація (не комітиться)
 
 ## ⚙️ Налаштування
 
-### Зміна частоти перевірки
+### Зміна розкладу
 
-Відредагуйте `docker-compose.yml`, секцію `scheduler`:
+Відредагуйте файл `crontab` у корені проєкту, наприклад:
 
-```yaml
-environment:
-  # Кожні 30 хвилин
-  - CRON_SCHEDULE=*/30 * * * * docker exec dtek-monitor node monitor.js
-
-  # Кожну годину
-  - CRON_SCHEDULE=0 * * * * docker exec dtek-monitor node monitor.js
-
-  # Кожні 5 хвилин
-  - CRON_SCHEDULE=*/5 * * * * docker exec dtek-monitor node monitor.js
+```cron
+# Кожні 30 хвилин
+*/30 * * * * cd /app && node monitor.js
 ```
 
-Після зміни перезапустіть:
+Файл копіюється в образ, тому потрібно перебудувати контейнер:
 
 ```bash
-docker-compose down
-docker-compose up -d
+docker compose up -d --build
 ```
 
-### Ручний запуск перевірки
+### Ручний запуск
 
 ```bash
-# Виконати перевірку вручну
 docker exec dtek-monitor node monitor.js
+docker exec dtek-monitor node daily-summary.js
 ```
 
-## 📊 Моніторинг та логи
-
-### Переглянути статус контейнерів
+## 📊 Логи та стан
 
 ```bash
-docker-compose ps
-```
+docker compose ps
+docker compose logs --tail=50 -f
 
-### Переглянути логи в реальному часі
-
-```bash
-# Всі сервіси
-docker-compose logs -f
-
-# Тільки останні 50 рядків
-docker-compose logs --tail=50 -f
-
-# Конкретний сервіс
-docker-compose logs -f monitor
-```
-
-### Перевірити артефакти
-
-```bash
-# Подивитися збережене повідомлення
-cat artifacts/last-message.json
+# Історія надісланих повідомлень
+cat artifacts/message-history.json
 ```
 
 ## 🔧 Корисні команди
 
 ```bash
 # Перебудувати образ після змін коду
-docker-compose up -d --build
+docker compose up -d --build
 
 # Зайти в контейнер
 docker exec -it dtek-monitor /bin/bash
 
-# Перезапустити сервіси
-docker-compose restart
-
-# Переглянути використання ресурсів
-docker stats dtek-monitor dtek-scheduler
-
-# Очистити старі образи
-docker image prune -a
+# Перезапустити
+docker compose restart
 ```
 
 ## 🐛 Налагодження
 
-### Контейнер не запускається
-
 ```bash
-# Переглянути логи збірки
-docker-compose build --no-cache
+# Збірка без кешу
+docker compose build --no-cache
 
-# Переглянути детальні логи
-docker-compose logs --tail=100
-```
-
-### Playwright помилки
-
-```bash
-# Перевірити встановлення браузерів
+# Версія Playwright
 docker exec dtek-monitor npx playwright --version
+
+# Перевірити, що supercronic працює
+docker exec dtek-monitor ps aux | grep supercronic
 ```
 
-### Проблеми з cron
-
-```bash
-# Переглянути логи планувальника
-docker-compose logs scheduler
-
-# Перевірити чи працює cron
-docker exec dtek-scheduler ps aux | grep cron
-```
+Версія базового образу Playwright в `Dockerfile` має збігатися з версією `playwright` у `package-lock.json`.
 
 ## 📦 Збереження даних
 
-Артефакти (last-message.json) зберігаються в локальній директорії `./artifacts` через bind mount. Це означає:
-
-- ✅ Дані зберігаються між перезапусками контейнера
-- ✅ Можна редагувати/переглядати файли з хоста
-- ✅ Не втрачаються при `docker-compose down`
-
-Якщо потрібно очистити дані:
-
-```bash
-rm -rf artifacts/
-```
+Артефакти (`message-history.json`) зберігаються в `./artifacts` через bind mount, тому не втрачаються при перезапуску чи `docker compose down`. Директорія має бути доступна для запису користувачу `pwuser` (uid 1001 в образі); на Linux перед першим запуском виконайте `sudo chown -R 1001:1001 artifacts`.
 
 ## 🔄 Міграція з GitHub Actions
 
-Якщо раніше використовували GitHub Actions:
-
-1. Скопіюйте `artifacts/last-message.json` з репозиторію у локальну директорію
-2. Вимкніть GitHub Actions workflow (або видаліть `.github/workflows/monitor.yml`)
-3. Запустіть Docker setup
+1. Скопіюйте `artifacts/message-history.json` з репозиторію в локальну директорію `artifacts/`.
+2. Вимкніть GitHub Actions workflows (`monitor.yml`, `daily-summary.yml`), щоб не було дублювання повідомлень.
+3. Запустіть Docker setup.
 
 ## 🆚 Порівняння з GitHub Actions
 
 | Аспект | GitHub Actions | Docker |
 |--------|---------------|--------|
-| Хостинг | GitHub серверах | Ваш сервер |
+| Хостинг | Сервери GitHub | Ваш сервер |
 | Вартість | Безкоштовно | Ресурси вашого сервера |
-| Контроль | Обмежений | Повний |
+| Точність розкладу | Cron може запізнюватись | Точно за crontab |
 | Налаштування | Через secrets | Через .env |
-| Логи | У GitHub | Локально |
 | Стан | Git commits | Локальні файли |
 
 ## 📝 Примітки
 
-- Docker образ містить Chromium (~400MB), тому перша збірка може зайняти час
-- Переконайтеся що порт Docker socket доступний для планувальника
-- `.env` файл не повинен комітитися в репозиторій (вже в .gitignore)
+- Образ містить Chromium (~400MB), перша збірка може зайняти час.
+- `.env` не повинен комітитися (вже в .gitignore).

@@ -6,7 +6,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 ## Key Features
 - Monitors DTEK website for power outages every 10 minutes via GitHub Actions
 - Sends notifications to Telegram when outages are detected
-- Updates existing messages instead of creating new ones (one message per day)
+- Sends separate messages per event: new outage, outage passed, outage cancelled, emergency outage
 - Displays outage reason, start time, and expected restoration time
 - Stores state in artifacts committed to repository
 
@@ -14,9 +14,14 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 
 ### Main Components
 1. **monitor.js** - Main monitoring script
-2. **GitHub Actions workflow** - Automated execution every 10 minutes
-3. **Telegram Bot** - Notification delivery
-4. **Artifacts** - State persistence (last-message.json)
+2. **daily-summary.js** - Daily morning summary (GitHub Actions 00:10 UTC; Docker 00:05 Kyiv)
+3. **lib/** - Shared modules (`lib/dtek.js` DTEK scraping, `lib/telegram.js` Telegram API)
+4. **GitHub Actions workflows** - Automated execution every 10 minutes (`monitor.yml`) and daily (`daily-summary.yml`)
+5. **Docker** - Single container with supercronic scheduler (`crontab`, `Dockerfile`, `docker-compose.yml`)
+6. **Telegram Bot** - Notification delivery
+7. **Artifacts** - State persistence (`artifacts/message-history.json`)
+8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
+9. **Tests** - `monitor.test.js`, `daily-summary.test.js` (run with `npm test`)
 
 ### Technology Stack
 - Node.js (v20.19.0+)
@@ -38,18 +43,22 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 2. Makes AJAX request with address details to get outage information
 3. Checks if there's an active power outage
 4. If outage detected, sends/updates Telegram notification
-5. Saves message metadata to artifacts/last-message.json
+5. Saves message history to artifacts/message-history.json
 6. GitHub Actions commits artifacts back to repository
 
 ## Important Files
 - `monitor.js` - Main monitoring logic
 - `.github/workflows/monitor.yml` - CI/CD workflow
-- `artifacts/last-message.json` - Stores last message metadata
+- `daily-summary.js`, `lib/` - Daily summary and shared modules
+- `artifacts/message-history.json` - Stores sent message history (state)
+- `scripts/` - Debug/preview scripts
+- `monitor.test.js`, `daily-summary.test.js` - Tests
+- `crontab`, `Dockerfile`, `docker-compose.yml` - Docker deployment
 - `package.json` - Dependencies and project metadata
 - `.env.example` - Environment variables template
 
 ## Development Notes
 - The project scrapes DTEK website: https://www.dtek-krem.com.ua/ua/shutdowns
 - Uses CSRF token from page for AJAX requests
-- Implements message deduplication (one message per day)
+- Implements message deduplication via message history (separate message per event type)
 - Automatic retry on notification failures
