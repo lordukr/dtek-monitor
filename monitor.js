@@ -935,103 +935,6 @@ async function sendNotification(
   return { wasDuplicate: false, success: data.ok }
 }
 
-async function commitMessageHistory() {
-  try {
-    // Check if running in CI/GitHub Actions
-    const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true"
-
-    if (!isCI) {
-      console.log("⏭️ Skipping git commit (not running in CI)")
-      return
-    }
-
-    console.log("🌀 Committing message history to git...")
-
-    const { execSync } = require("child_process")
-
-    // Configure git if needed
-    try {
-      execSync('git config user.email "noreply@github.com"', { stdio: "ignore" })
-      execSync('git config user.name "GitHub Actions Bot"', { stdio: "ignore" })
-    } catch (error) {
-      // Git config already set
-    }
-
-    // Check if message history file exists and has changes
-    if (!fs.existsSync(MESSAGE_HISTORY_FILE)) {
-      console.log("⏭️ No message history file to commit")
-      return
-    }
-
-    // Determine the main branch and ensure we're on it
-    let mainBranch = "main"
-    try {
-      const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-        encoding: "utf8",
-      }).trim()
-      console.log(`📍 Current branch: ${currentBranch}`)
-
-      // Detect if the repo uses 'master' or 'main'
-      try {
-        execSync("git show-ref --verify refs/heads/main", { stdio: "ignore" })
-        mainBranch = "main"
-      } catch {
-        try {
-          execSync("git show-ref --verify refs/heads/master", { stdio: "ignore" })
-          mainBranch = "master"
-        } catch {
-          console.log("⚠️ Could not determine main branch")
-        }
-      }
-
-      console.log(`📌 Main branch: ${mainBranch}`)
-
-      if (currentBranch !== mainBranch) {
-        console.log(`⚠️ Not on ${mainBranch} branch, checking out ${mainBranch}...`)
-        execSync(`git checkout ${mainBranch}`, { stdio: "inherit" })
-      }
-    } catch (error) {
-      console.log("⚠️ Could not determine or switch branch:", error.message)
-    }
-
-    // Add the message history file
-    execSync("git add artifacts/message-history.json", { stdio: "inherit" })
-
-    // Check if there are changes to commit
-    try {
-      execSync('git diff --cached --quiet artifacts/message-history.json')
-      console.log("⏭️ No changes to commit")
-      return
-    } catch (error) {
-      // There are changes, continue with commit
-    }
-
-    // Commit the changes first
-    execSync(
-      'git commit -m "chore: update message history [skip ci]"',
-      { stdio: "inherit" }
-    )
-
-    // Pull latest changes from remote with rebase
-    try {
-      console.log("🔄 Pulling latest changes from remote...")
-      execSync(`git pull origin ${mainBranch} --rebase`, { stdio: "inherit" })
-    } catch (pullError) {
-      console.log("⚠️ Pull failed:", pullError.message)
-      // If pull fails, abort rebase and try to push anyway
-      try {
-        execSync("git rebase --abort", { stdio: "ignore" })
-      } catch {}
-    }
-
-    // Push to the main branch
-    execSync(`git push origin ${mainBranch}`, { stdio: "inherit" })
-    console.log(`✅ Message history committed and pushed to ${mainBranch}`)
-  } catch (error) {
-    console.log("⚠️ Failed to commit message history:", error.message)
-  }
-}
-
 async function run() {
   const { CITY, STREET } = getConfig()
   const info = await getInfo({ city: CITY, street: STREET })
@@ -1064,8 +967,6 @@ async function run() {
       },
       outageData
     )
-
-    await commitMessageHistory()
   } else if (cancelledOutageInfo) {
     // An outage was cancelled - send "outage cancelled" notification (throws on failure)
     await sendOutageCancelledNotification(info, cancelledOutageInfo)
@@ -1079,16 +980,9 @@ async function run() {
       },
       outageData
     )
-
-    await commitMessageHistory()
   } else if (outageData.isOutageDetected) {
     // Regular outage notification
-    const result = await sendNotification(info, outageData, { lastEntry })
-
-    // Only commit if message was actually sent (not a duplicate)
-    if (result && !result.wasDuplicate) {
-      await commitMessageHistory()
-    }
+    await sendNotification(info, outageData, { lastEntry })
   } else {
     console.log("✅ No outage detected - no notification needed")
 

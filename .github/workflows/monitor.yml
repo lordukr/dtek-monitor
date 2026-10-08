@@ -1,7 +1,9 @@
 name: Run power outages monitor
 
 on:
-  # Розклад вимкнено: моніторинг працює на VPS (Docker). Щоб увімкнути - розкоментуйте.
+  # Розклад вимкнено: моніторинг працює на VPS (Docker).
+  # УВАГА: на GitHub Actions стан (artifacts/message-history.json) більше не зберігається між запусками,
+  # тому запуск за розкладом повторно надсилатиме сповіщення. Ручний запуск - лише для тестування.
   # schedule:
   #   - cron: "*/10 * * * *"
   workflow_dispatch:
@@ -11,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   monitor:
@@ -21,8 +23,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

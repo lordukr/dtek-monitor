@@ -105,7 +105,7 @@ docker exec dtek-monitor node daily-summary.js
 docker compose ps
 docker compose logs --tail=50 -f
 
-# Історія надісланих повідомлень
+# Стан бота (останнє надіслане повідомлення; лише на хості, не в git)
 cat artifacts/message-history.json
 ```
 
@@ -160,14 +160,14 @@ docker logs dtek-monitor 2>&1 | grep 'Getting info failed'
 
 ## 📦 Збереження даних
 
-Артефакти (`message-history.json`) зберігаються в `./artifacts` через bind mount, тому не втрачаються при перезапуску чи `docker compose down`. Користувач контейнера `app` має uid 1001, тому директорія має бути доступна для запису цьому uid.
+Стан бота (`message-history.json`) зберігається в `./artifacts` через bind mount, тому не втрачається при перезапуску чи `docker compose down`. Файл не відстежується git: єдина копія - на хості, де працює контейнер (деплой через `deploy.yml` виключає `artifacts/` з rsync, тому не перезаписує і не видаляє її). Якщо файл зникне або пошкодиться, бот створить його заново під час наступного успішного запуску; при цьому можливе одне повторне сповіщення, а повідомлення «відключення минуло» / «відключення скасовано» для поточного відключення може не надійти. Директорія має бути доступна для запису користувачу контейнера `app` (uid 1001); на Linux перед першим запуском виконайте `mkdir -p artifacts && sudo chown -R 1001:1001 artifacts`. Якщо сервер оновлюється через `git pull` (а не через `deploy.yml`), перед оновленням до цієї версії збережіть копію `artifacts/message-history.json`: git видалить файл, бо він більше не відстежується. Після оновлення поверніть файл на місце і виконайте `sudo chown 1001:1001 artifacts/message-history.json`.
 
 **Міграція власника (на VPS, до злиття PR):** перевірте власника командою `ls -n artifacts`. Якщо власник не 1001, виконайте `sudo chown -R 1001:1001 artifacts`.
 
 ## 🔄 Міграція з GitHub Actions
 
-1. Скопіюйте `artifacts/message-history.json` з репозиторію в локальну директорію `artifacts/`.
-2. Вимкніть GitHub Actions workflows (`monitor.yml`, `daily-summary.yml`), щоб не було дублювання повідомлень.
+1. Вимкніть GitHub Actions workflows (`monitor.yml`, `daily-summary.yml`), щоб не було дублювання повідомлень.
+2. (Необов'язково) Перенесіть стан. Це має сенс, лише якщо workflow працював нещодавно: застарілий стан може спричинити хибне повідомлення «відключення минуло», тож якщо сумніваєтесь, пропустіть цей крок. У локальному повному (не shallow) клоні вашого репозиторію виконайте `git pull`, потім `git log -n 1 --diff-filter=AM --format=%h -- artifacts/message-history.json` - команда покаже коміт з останньою збереженою версією; збережіть її: `git show <коміт>:artifacts/message-history.json > message-history.json`. Скопіюйте файл на сервер у `artifacts/` директорії проєкту (наприклад, `scp message-history.json <сервер>:<директорія-проєкту>/artifacts/`) і на сервері в директорії проєкту виконайте `sudo chown 1001:1001 artifacts/message-history.json`, інакше бот не зможе оновлювати файл. Якщо пропустити цей крок, файл буде створено автоматично під час першого запуску.
 3. Запустіть Docker setup.
 
 ## 🆚 Порівняння з GitHub Actions
@@ -178,7 +178,7 @@ docker logs dtek-monitor 2>&1 | grep 'Getting info failed'
 | Вартість | Безкоштовно | Ресурси вашого сервера |
 | Точність розкладу | Cron може запізнюватись | Точно за crontab |
 | Налаштування | Через secrets | Через .env |
-| Стан | Git commits | Локальні файли |
+| Стан | Не зберігається між запусками | Локальний файл (bind mount) |
 
 ## 📝 Примітки
 

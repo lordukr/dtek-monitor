@@ -1,6 +1,5 @@
 node_modules
 .env
 
-# Локальні артефакти (скріншоти, дампи). Відстежується лише стан бота.
+# Локальні артефакти (скріншоти, дампи) та стан бота (message-history.json) - не відстежуються git.
 artifacts/*
-!artifacts/message-history.json
