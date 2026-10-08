@@ -1,8 +1,9 @@
 # Розклад для supercronic. Часовий пояс задається змінною TZ=Europe/Kyiv.
 # Після зміни потрібно перебудувати образ: docker compose up -d --build
+# timeout 240 с: завислий процес не блокує наступні запуски (supercronic не стартує завдання, поки попереднє працює); вбите завдання = код 124 (або 137 після SIGKILL через -k 10)
 
 # Перевірка відключень кожні 10 хвилин
-*/10 * * * * cd /app && node monitor.js
+*/10 * * * * cd /app && timeout -k 10 240 node monitor.js
 
 # Щоденне ранкове повідомлення о 00:05 за київським часом
-5 0 * * * cd /app && node daily-summary.js
+5 0 * * * cd /app && timeout -k 10 240 node daily-summary.js
