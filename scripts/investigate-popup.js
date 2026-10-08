@@ -1,4 +1,4 @@
-require("dotenv").config()
+require("dotenv").config({ path: require("path").resolve(__dirname, "..", ".env") })
 const { chromium } = require("playwright")
 
 async function investigatePopup() {
@@ -92,7 +92,7 @@ async function investigatePopup() {
     }
 
     // Get page screenshot
-    await browserPage.screenshot({ path: 'artifacts/emergency-popup-screenshot.png', fullPage: true })
+    await browserPage.screenshot({ path: require("path").resolve(__dirname, "..", "artifacts", "emergency-popup-screenshot.png"), fullPage: true })
     console.log("\n📸 Screenshot saved to: artifacts/emergency-popup-screenshot.png")
 
     // Wait a bit to see the page

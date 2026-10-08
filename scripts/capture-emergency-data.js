@@ -8,7 +8,7 @@
  * Usage: node capture-emergency-data.js
  */
 
-require("dotenv").config()
+require("dotenv").config({ path: require("path").resolve(__dirname, "..", ".env") })
 const { chromium } = require("playwright")
 const fs = require("fs")
 const path = require("path")
@@ -87,7 +87,7 @@ async function captureEmergencyData() {
   // Save to file
   const timestamp = new Date().toISOString().replace(/:/g, "-").split(".")[0]
   const filename = `emergency-capture-${timestamp}.json`
-  const filepath = path.join(__dirname, "artifacts", filename)
+  const filepath = path.resolve(__dirname, "..", "artifacts", filename)
 
   fs.mkdirSync(path.dirname(filepath), { recursive: true })
   fs.writeFileSync(filepath, JSON.stringify({

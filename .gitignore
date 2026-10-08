@@ -1,2 +1,6 @@
 node_modules
 .env
+
+# Локальні артефакти (скріншоти, дампи). Відстежується лише стан бота.
+artifacts/*
+!artifacts/message-history.json

@@ -1,42 +1,32 @@
-# Node modules (will be installed in container)
 node_modules/
-
-# Environment files
 .env
-.env.local
-.env.*.local
-
-# Git
+.env.*
+!.env.example
 .git/
 .gitignore
 .github/
 
-# Documentation
-README.md
+# Документація та службові файли
 *.md
+.claude/
+docs/
 
-# IDE
+# Ad-hoc скрипти та тести
+scripts/
+*.test.js
+
+# Артефакти (монтуються як volume)
+artifacts/
+
+# IDE / OS
 .idea/
 .vscode/
 *.swp
-*.swo
-
-# OS files
 .DS_Store
 Thumbs.db
 
-# Logs
+# Логи та звіти
 *.log
 npm-debug.log*
-
-# Test artifacts
 playwright-report/
 test-results/
-
-# Claude files
-.claude/
-
-# Docker files
-Dockerfile
-docker-compose.yml
-.dockerignore
