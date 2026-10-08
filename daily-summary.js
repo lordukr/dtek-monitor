@@ -1,93 +1,19 @@
 require("dotenv").config()
-const { chromium } = require("playwright")
+const { getInfo: fetchDtekInfo } = require("./lib/dtek")
+const { sendTelegramMessage } = require("./lib/telegram")
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, CITY, STREET, HOUSE } =
   process.env
 
 async function getInfo() {
-  console.log("🌀 Getting info...")
   console.log("📍 Address details:")
   console.log(`   City: ${CITY}`)
   console.log(`   Street: ${STREET}`)
   console.log(`   House: ${HOUSE}`)
 
-  const browser = await chromium.launch({ headless: true })
-  const browserContext = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    locale: "uk-UA",
-  })
-  const browserPage = await browserContext.newPage()
-
-  try {
-    console.log("🌐 Opening DTEK website...")
-    await browserPage.goto("https://www.dtek-krem.com.ua/ua/shutdowns", {
-      waitUntil: "networkidle",
-      timeout: 60000,
-    })
-    console.log("✅ Page loaded successfully")
-
-    // Wait a bit for any bot protection to pass
-    console.log("⏳ Waiting for page to fully load...")
-    await browserPage.waitForTimeout(3000)
-
-    console.log("🔑 Looking for CSRF token...")
-    const csrfTokenTag = await browserPage.waitForSelector(
-      'meta[name="csrf-token"]',
-      { state: "attached" }
-    )
-    const csrfToken = await csrfTokenTag.getAttribute("content")
-    console.log(`✅ CSRF token found: ${csrfToken.substring(0, 20)}...`)
-
-    console.log("📡 Sending AJAX request to DTEK API...")
-    const info = await browserPage.evaluate(
-      async ({ CITY, STREET, csrfToken }) => {
-        const formData = new URLSearchParams()
-        formData.append("method", "getHomeNum")
-        formData.append("data[0][name]", "city")
-        formData.append("data[0][value]", CITY)
-        formData.append("data[1][name]", "street")
-        formData.append("data[1][value]", STREET)
-        formData.append("data[2][name]", "updateFact")
-        formData.append("data[2][value]", new Date().toLocaleString("uk-UA"))
-
-        console.log("📤 Request params:", { CITY, STREET })
-
-        const response = await fetch("/ua/ajax", {
-          method: "POST",
-          headers: {
-            "x-requested-with": "XMLHttpRequest",
-            "x-csrf-token": csrfToken,
-          },
-          body: formData,
-        })
-
-        const text = await response.text()
-        console.log("📡 Response status:", response.status)
-        console.log("📡 Response text preview:", text.substring(0, 200))
-
-        try {
-          const json = JSON.parse(text)
-          console.log("✅ JSON parsed successfully")
-          console.log("📦 Response data keys:", Object.keys(json))
-          return json
-        } catch (e) {
-          throw new Error(
-            `Failed to parse JSON. Status: ${response.status}, Response: ${text.substring(0, 500)}`
-          )
-        }
-      },
-      { CITY, STREET, csrfToken }
-    )
-
-    console.log("✅ Getting info finished.")
-    console.log("📦 Full API response:", JSON.stringify(info, null, 2))
-    return info
-  } catch (error) {
-    throw Error(`❌ Getting info failed: ${error.message}`)
-  } finally {
-    await browser.close()
-  }
+  const info = await fetchDtekInfo({ city: CITY, street: STREET })
+  console.log("📦 Full API response:", JSON.stringify(info, null, 2))
+  return info
 }
 
 function checkPlannedOutages(info) {
@@ -508,28 +434,22 @@ async function sendDailySummary(info, outageData) {
   console.log(text.split("\n").slice(0, 5).join("\n") + "...")
 
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text,
-          parse_mode: "HTML",
-        }),
-      }
-    )
+    const data = await sendTelegramMessage(text, {
+      token: TELEGRAM_BOT_TOKEN,
+      chatId: TELEGRAM_CHAT_ID,
+    })
 
-    const data = await res.json()
-
-    if (data.ok) {
-      console.log("🟢 Daily summary sent successfully!")
-      console.log(`   Message ID: ${data.result.message_id}`)
-      console.log(`   Chat: ${data.result.chat.first_name} ${data.result.chat.last_name || ''}`)
-      console.log(`   Timestamp: ${new Date(data.result.date * 1000).toLocaleString('uk-UA')}`)
-    } else {
-      console.log("⚠️ Telegram API returned error:", data)
+    console.log("🟢 Daily summary sent successfully!")
+    console.log(`   Message ID: ${data.result?.message_id}`)
+    if (data.result?.chat) {
+      console.log(
+        `   Chat: ${data.result.chat.first_name} ${data.result.chat.last_name || ""}`
+      )
+    }
+    if (data.result?.date) {
+      console.log(
+        `   Timestamp: ${new Date(data.result.date * 1000).toLocaleString("uk-UA")}`
+      )
     }
 
     return data
@@ -576,8 +496,8 @@ async function run() {
 // Only run if this is the main module
 if (require.main === module) {
   run().catch((error) => {
-    console.error("💥 Fatal error:", error.message)
-    process.exit(1)
+    console.error("💥 Fatal error:", error)
+    process.exitCode = 1
   })
 }
 
