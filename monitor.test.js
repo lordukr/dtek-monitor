@@ -16,6 +16,7 @@ const {
   isDuplicateMessage,
   detectOutagePassed,
   detectOutageCancelled,
+  isAnnouncedOutageStart,
   calculateOutageDuration,
   getEmergencyTiming,
   buildOutageMessage,
@@ -534,5 +535,60 @@ describe("Оновлено о footer", () => {
       text: "hi",
       parse_mode: "HTML",
     })
+  })
+})
+
+describe("isAnnouncedOutageStart", () => {
+  const sched = (current, next, queueGroup = "GPV1.2") => ({
+    emergencyOutage: null,
+    nextScheduledOutage: {
+      queueGroup,
+      currentOutage: current ? { timeRange: current } : null,
+      nextOutage: next ? { timeRange: next } : null,
+    },
+  })
+  const entry = (outageData) => ({ timestamp: at("20:50").toISOString(), outageData })
+
+  it("announced next outage becoming current is the same outage", () => {
+    const last = entry(sched(null, "21:00-24:00"))
+    assert.strictEqual(isAnnouncedOutageStart(sched("21:00-24:00", null), last), true)
+    // A later outage showing up as "next" is announced when this one passes
+    assert.strictEqual(
+      isAnnouncedOutageStart(sched("21:00-24:00", "23:00-24:00"), last),
+      true
+    )
+  })
+
+  it("a changed time range is a real change", () => {
+    const last = entry(sched(null, "21:00-24:00"))
+    assert.strictEqual(isAnnouncedOutageStart(sched("20:00-24:00", null), last), false)
+    assert.strictEqual(isAnnouncedOutageStart(sched(null, "22:00-24:00"), last), false)
+  })
+
+  it("ignores other queues, emergencies and missing history", () => {
+    const last = entry(sched(null, "21:00-24:00"))
+    assert.strictEqual(
+      isAnnouncedOutageStart(sched("21:00-24:00", null, "GPV2.1"), last),
+      false
+    )
+    const emergency = { ...sched("21:00-24:00", null), emergencyOutage: { start_date: "a" } }
+    assert.strictEqual(isAnnouncedOutageStart(emergency, last), false)
+    assert.strictEqual(isAnnouncedOutageStart(sched("21:00-24:00", null), null), false)
+  })
+
+  it("already current outage is not a start", () => {
+    const last = entry(sched("21:00-24:00", null))
+    assert.strictEqual(isAnnouncedOutageStart(sched("21:00-24:00", null), last), false)
+  })
+
+  it("the silently saved current outage still produces 'outage passed'", () => {
+    // State saved by run() when the outage started, then the outage ends
+    const last = entry(sched("18:00-20:00", null))
+    const r = detectOutagePassed(sched(null, "22:00-23:00"), {
+      lastEntry: last,
+      now: at("20:05"),
+    })
+    assert.strictEqual(r.passedOutage.timeRange, "18:00-20:00")
+    assert.strictEqual(r.nextOutage.timeRange, "22:00-23:00")
   })
 })

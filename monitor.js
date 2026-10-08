@@ -658,6 +658,24 @@ function detectOutageCancelled(
   return null
 }
 
+// The already announced next outage has just started (e.g. N:21:00-24:00 ->
+// C:21:00-24:00). It is the same outage, so it is not worth a new message.
+function isAnnouncedOutageStart(currentOutageData, lastEntry) {
+  const previous = lastEntry?.outageData
+  if (previous?.emergencyOutage || currentOutageData.emergencyOutage) return false
+
+  const was = previous?.nextScheduledOutage
+  const is = currentOutageData.nextScheduledOutage
+  return !!(
+    was &&
+    is &&
+    was.queueGroup === is.queueGroup &&
+    !was.currentOutage &&
+    was.nextOutage &&
+    is.currentOutage?.timeRange === was.nextOutage.timeRange
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Messages / sending
 // ---------------------------------------------------------------------------
@@ -1005,6 +1023,8 @@ async function run() {
   })
 
   let sentInformationMessage = false
+  // Latest information message, refreshed below if no new one is sent
+  let messageToRefresh = lastEntry?.message
 
   if (passedOutageInfo) {
     // An outage just ended - send "outage passed" notification (throws on failure)
@@ -1040,6 +1060,26 @@ async function run() {
       },
       outageData
     )
+  } else if (isAnnouncedOutageStart(outageData, lastEntry)) {
+    console.log("⚡️ Announced outage has started - updating the latest message")
+
+    // Rewrite the latest message instead of sending a new one ("Поточне
+    // відключення"). History still has to record the outage as current:
+    // the outage-passed detection relies on it.
+    const message = lastEntry.message && {
+      id: lastEntry.message.id,
+      text: buildOutageMessage(info, outageData, now),
+    }
+    saveMessageHistory(
+      {
+        timestamp: new Date().toISOString(),
+        hash: createMessageHash(outageData),
+        sent: true,
+        ...(message ? { message } : {}),
+      },
+      outageData
+    )
+    messageToRefresh = message
   } else if (outageData.isOutageDetected) {
     // Regular outage notification (nothing is sent for a duplicate)
     const result = await sendNotification(info, outageData, { lastEntry })
@@ -1069,9 +1109,9 @@ async function run() {
     }
   }
 
-  if (!sentInformationMessage && lastEntry?.message) {
+  if (!sentInformationMessage && messageToRefresh) {
     // Nothing new to report - refresh "Оновлено о" in the latest message
-    const stillExists = await refreshUpdatedAt(lastEntry.message, now)
+    const stillExists = await refreshUpdatedAt(messageToRefresh, now)
     const entry = !stillExists && loadMessageHistory()
     if (entry) {
       const { message: _, ...rest } = entry
@@ -1101,6 +1141,7 @@ module.exports = {
   isDuplicateMessage,
   detectOutagePassed,
   detectOutageCancelled,
+  isAnnouncedOutageStart,
   calculateOutageDuration,
   buildOutageMessage,
   buildPassedMessage,
