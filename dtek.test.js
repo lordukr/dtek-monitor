@@ -89,3 +89,186 @@ describe("isIncapsulaChallenge", () => {
     assert.equal(dtek.isIncapsulaChallenge(42), false)
   })
 })
+
+describe("extractAttentionModalText", () => {
+  const wrap = (inner) => `<div id="modal-attention">${inner}</div>`
+
+  test("emergency-new.html text has wording and excludes FAQ", () => {
+    const html = fixture("emergency-new.html")
+    const text = dtek.extractAttentionModalText(html)
+    assert.ok(text.includes("За наказом НЕК Укренерго"))
+    assert.ok(text.includes("введені екстрені відключення"))
+    const faq = /<section id="fixture-faq">([\s\S]*?)<\/section>/.exec(html)[1]
+    const faqText = faq.replace(/<[^<>]*>/g, " ").replace(/\s+/g, " ").trim()
+    assert.ok(faqText.length > 0)
+    assert.ok(!text.includes(faqText))
+  })
+
+  test("no-modal.html returns null", () => {
+    assert.equal(dtek.extractAttentionModalText(fixture("no-modal.html")), null)
+  })
+
+  test("MicroModal.show script alone returns null", () => {
+    assert.equal(
+      dtek.extractAttentionModalText('<script>MicroModal.show("modal-attention")</script> екстрені'),
+      null
+    )
+  })
+
+  test("accepts any attribute order and quote style", () => {
+    assert.equal(
+      dtek.extractAttentionModalText(
+        `<div class="m-attention" id='modal-attention' aria-hidden="true"><p>Текст</p></div>`
+      ),
+      "Текст"
+    )
+  })
+
+  test("nested balanced divs stop at the real close", () => {
+    assert.equal(
+      dtek.extractAttentionModalText('<div id="modal-attention"><div>a</div><p>b</p></div><p>c</p>'),
+      "a b"
+    )
+  })
+
+  test("unbalanced block falls back to the rest", () => {
+    const text = dtek.extractAttentionModalText('<div id="modal-attention"><div>екстрені')
+    assert.ok(text.includes("екстрені"))
+  })
+
+  test("empty modal returns empty string", () => {
+    assert.equal(dtek.extractAttentionModalText('<div id="modal-attention"></div>'), "")
+  })
+
+  test("decodes entities", () => {
+    assert.equal(
+      dtek.extractAttentionModalText(
+        wrap("A&nbsp;B &amp; &#1077;&#x435; &quot;q&quot; &#39;s&#39;")
+      ),
+      `A B & ее "q" 's'`
+    )
+  })
+
+  test("removes script, style and comment content", () => {
+    assert.equal(
+      dtek.extractAttentionModalText(
+        wrap("<script>var a=1</script><style>.a{}</style><!-- c -->T")
+      ),
+      "T"
+    )
+  })
+
+  test("non-string input returns null", () => {
+    assert.equal(dtek.extractAttentionModalText(null), null)
+    assert.equal(dtek.extractAttentionModalText(undefined), null)
+    assert.equal(dtek.extractAttentionModalText(42), null)
+  })
+
+  test("out-of-range entity is left as is and does not throw", () => {
+    const html = wrap("&#99999999; екстрені")
+    assert.equal(dtek.extractAttentionModalText(html), "&#99999999; екстрені")
+    assert.equal(dtek.detectSystemWideEmergency(html), true)
+  })
+
+  test("pathological inputs are linear and return null", () => {
+    const inputs = [
+      "<div".repeat(50000),
+      '<div id="modal-attention"' + "<div".repeat(50000),
+      "modal-attention ".repeat(20000),
+    ]
+    const t0 = performance.now()
+    for (const input of inputs) assert.equal(dtek.extractAttentionModalText(input), null)
+    assert.ok(performance.now() - t0 < 200)
+  })
+})
+
+describe("detectSystemWideEmergency", () => {
+  const wrap = (inner) => `<div id="modal-attention">${inner}</div>`
+
+  test("emergency-new.html is an emergency", () => {
+    assert.equal(dtek.detectSystemWideEmergency(fixture("emergency-new.html")), true)
+  })
+
+  test("emergency-old.html is an emergency", () => {
+    assert.equal(dtek.detectSystemWideEmergency(fixture("emergency-old.html")), true)
+  })
+
+  test("is case-insensitive", () => {
+    assert.equal(dtek.detectSystemWideEmergency(wrap("ЕКСТРЕНІ")), true)
+    assert.equal(dtek.detectSystemWideEmergency(wrap("Екстрених")), true)
+  })
+
+  test("modal-no-emergency.html is not an emergency", () => {
+    assert.equal(dtek.detectSystemWideEmergency(fixture("modal-no-emergency.html")), false)
+  })
+
+  test("no-modal.html is not an emergency", () => {
+    assert.equal(dtek.detectSystemWideEmergency(fixture("no-modal.html")), false)
+  })
+
+  test("empty and non-string input is false", () => {
+    assert.equal(dtek.detectSystemWideEmergency(""), false)
+    assert.equal(dtek.detectSystemWideEmergency(null), false)
+    assert.equal(dtek.detectSystemWideEmergency(42), false)
+  })
+
+  test("stem only in script, style or comment is false", () => {
+    assert.equal(dtek.detectSystemWideEmergency(wrap("<script>екстрені</script>")), false)
+    assert.equal(dtek.detectSystemWideEmergency(wrap("<style>екстрені</style>")), false)
+    assert.equal(dtek.detectSystemWideEmergency(wrap("<!-- екстрені -->")), false)
+  })
+
+  test("tag-adjacent wording is true", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency(
+        '<div id="modal-attention"><p>введені<strong>екстрені</strong></p></div>'
+      ),
+      true
+    )
+  })
+
+  test("unbalanced block is capped at 10000 chars", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency('<div id="modal-attention"><div>' + "x".repeat(10001) + "екстрені"),
+      false
+    )
+    assert.equal(
+      dtek.detectSystemWideEmergency('<div id="modal-attention"><div>екстрені' + "x".repeat(10001)),
+      true
+    )
+  })
+
+  test("stem after the modal closes is false", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency('<div id="modal-attention"><div>a</div></div><p>екстрені</p>'),
+      false
+    )
+  })
+
+  test("MicroModal.show script without a modal div is false", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency(
+        `<script>MicroModal.show('modal-attention')</script><p>екстрені</p>`
+      ),
+      false
+    )
+  })
+
+  test("a script's </div> does not close the block early", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency(
+        '<div id="modal-attention"><script>var t="</div>"</script><p>екстрені</p></div>'
+      ),
+      true
+    )
+  })
+
+  test("a script's <div> does not keep the block open", () => {
+    assert.equal(
+      dtek.detectSystemWideEmergency(
+        '<div id="modal-attention"><script>var t="<div>"</script><p>Текст</p></div><p>екстрені</p>'
+      ),
+      false
+    )
+  })
+})
