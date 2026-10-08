@@ -107,6 +107,8 @@ node daily-summary.js
 npm test
 ```
 
+Для кожного PR у `main` тести запускаються автоматично (`.github/workflows/test.yml`). Перевірка `npm test` обов'язкова: поки вона не пройде, merge заборонено (branch protection для `main`).
+
 Допоміжні debug-скрипти знаходяться в директорії `scripts/` (вони відкривають реальний сайт ДТЕК і не входять до `npm test`).
 
 ### Dev-залежності для scripts/
