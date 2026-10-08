@@ -422,9 +422,14 @@ async function rejectionOf(queue, options = {}) {
 const ajaxOk = () => ({ status: 200, body: fixture("ajax-sample.json") })
 
 describe("fetchInfo", () => {
-  test("(1) resolves to AJAX JSON plus hasSystemWideEmergency true; exact calls", async () => {
+  test("(1) resolves to AJAX JSON plus hasSystemWideEmergency true; exact calls", async (t) => {
+    const log = t.mock.method(console, "log", () => {})
     const fake = makeFake([{ status: 200, body: fixture("emergency-new.html") }, ajaxOk()])
     const info = await dtek.fetchInfo(ADDRESS, { client: fake, now: () => FIXED })
+    assert.ok(
+      log.mock.calls.some((c) => /^🚨 System-wide emergency popup detected! .*екстрен/i.test(String(c.arguments[0]))),
+      "emergency log line must include the matched modal excerpt"
+    )
     const sample = JSON.parse(fixture("ajax-sample.json"))
     for (const key of Object.keys(sample)) assert.deepEqual(info[key], sample[key], key)
     assert.equal(info.hasSystemWideEmergency, true)
@@ -592,6 +597,13 @@ describe("fetchInfo", () => {
     const { error } = await rejectionOf([{ status: 200, body }])
     assert.match(error.message, /CSRF token not found on page \(HTTP 200/)
     assert.doesNotMatch(error.message, /Blocked by Incapsula/)
+  })
+
+  test("(23) large block page with incident ID, status 403 -> blocked by Incapsula", async () => {
+    const body = "<p>Incapsula incident ID: 9-9</p>" + "<p>x</p>".repeat(10000)
+    const { error } = await rejectionOf([{ status: 403, body }])
+    assert.match(error.message, /Blocked by Incapsula/)
+    assert.match(error.message, /incident ID 9-9/)
   })
 
   test("(20) POST body read reset -> AJAX POST network error", async () => {
