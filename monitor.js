@@ -2,7 +2,11 @@ require("dotenv").config()
 const fs = require("fs")
 const path = require("path")
 const { getInfo } = require("./lib/dtek")
-const { sendTelegramMessage } = require("./lib/telegram")
+const {
+  sendTelegramMessage,
+  editTelegramMessage,
+  deleteTelegramMessage,
+} = require("./lib/telegram")
 
 const MESSAGE_HISTORY_FILE = path.resolve("artifacts", `message-history.json`)
 
@@ -66,6 +70,12 @@ function getKyivMidnightTimestamp(now = new Date()) {
   // Re-evaluate offset at the guess in case a DST switch happened between
   guess = utcMidnight - getKyivOffsetMs(new Date(guess))
   return Math.floor(guess / 1000)
+}
+
+// "HH:MM" in Kyiv
+function formatKyivTime(now = new Date()) {
+  const { hour, minute } = getKyivParts(now)
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
 }
 
 function formatKyivTimestamp(now = new Date()) {
@@ -935,6 +945,71 @@ async function sendNotification(
   return { wasDuplicate: false, success: data.ok }
 }
 
+// ---------------------------------------------------------------------------
+// Last status check message
+// ---------------------------------------------------------------------------
+// After every information message a separate silent message with the time of
+// the last check is sent and the previous one is deleted, so the chat only
+// ever has one, always below the latest update. While nothing changes, later
+// runs edit that message instead. Its id is kept in history as `statusMessageId`.
+
+function buildStatusCheckMessage(now = new Date()) {
+  return `🔄 <b>Остання перевірка статусу:</b> ${formatKyivTime(now)}`
+}
+
+// Sends a new status message. Returns its message_id, or null on failure
+// (the information message is already delivered, so this must not throw).
+async function sendStatusCheckMessage(now = new Date()) {
+  try {
+    const data = await sendTelegramMessage(buildStatusCheckMessage(now), {
+      ...getTelegramOptions(),
+      silent: true,
+    })
+    console.log("🟢 Status check message sent.")
+    return data.result?.message_id ?? null
+  } catch (error) {
+    console.log("⚠️ Failed to send status check message:", error.message)
+    return null
+  }
+}
+
+// Edits the existing status message with the current check time.
+// Returns false if the message is gone and its id should be forgotten.
+async function updateStatusCheckMessage(messageId, now = new Date()) {
+  try {
+    await editTelegramMessage(messageId, buildStatusCheckMessage(now), {
+      ...getTelegramOptions(),
+    })
+    console.log(`🔄 Status check message updated (${formatKyivTime(now)})`)
+  } catch (error) {
+    // Two runs within the same minute produce identical text
+    if (/message is not modified/i.test(error.message)) return true
+    if (/message to edit not found|message can't be edited/i.test(error.message)) {
+      console.log("⚠️ Status check message no longer editable - forgetting it")
+      return false
+    }
+    console.log("⚠️ Failed to update status check message:", error.message)
+  }
+  return true
+}
+
+// Best effort: a failed delete just leaves a stale status message behind
+async function deleteStatusCheckMessage(messageId) {
+  try {
+    await deleteTelegramMessage(messageId, { ...getTelegramOptions() })
+    console.log("🗑️ Previous status check message deleted.")
+  } catch (error) {
+    console.log("⚠️ Failed to delete previous status check message:", error.message)
+  }
+}
+
+function setStatusMessageId(statusMessageId) {
+  const entry = loadMessageHistory()
+  if (!entry) return
+  const { statusMessageId: _, ...rest } = entry
+  saveMessageHistory(statusMessageId ? { ...rest, statusMessageId } : rest)
+}
+
 async function run() {
   const { CITY, STREET } = getConfig()
   const info = await getInfo({ city: CITY, street: STREET })
@@ -953,9 +1028,12 @@ async function run() {
     now,
   })
 
+  let sentInformationMessage = false
+
   if (passedOutageInfo) {
     // An outage just ended - send "outage passed" notification (throws on failure)
     await sendOutagePassedNotification(info, passedOutageInfo)
+    sentInformationMessage = true
 
     // Update message history to reflect current state (only after successful send)
     saveMessageHistory(
@@ -970,6 +1048,7 @@ async function run() {
   } else if (cancelledOutageInfo) {
     // An outage was cancelled - send "outage cancelled" notification (throws on failure)
     await sendOutageCancelledNotification(info, cancelledOutageInfo)
+    sentInformationMessage = true
 
     saveMessageHistory(
       {
@@ -981,8 +1060,9 @@ async function run() {
       outageData
     )
   } else if (outageData.isOutageDetected) {
-    // Regular outage notification
-    await sendNotification(info, outageData, { lastEntry })
+    // Regular outage notification (nothing is sent for a duplicate)
+    const result = await sendNotification(info, outageData, { lastEntry })
+    sentInformationMessage = !result.wasDuplicate
   } else {
     console.log("✅ No outage detected - no notification needed")
 
@@ -998,12 +1078,31 @@ async function run() {
           hash: currentHash,
           sent: false,
           type: "no-outage",
+          // No message was sent, so keep updating the existing status message
+          ...(lastEntry?.statusMessageId
+            ? { statusMessageId: lastEntry.statusMessageId }
+            : {}),
         },
         outageData
       )
     } else {
       console.log("⏭️ State unchanged - no history update needed")
     }
+  }
+
+  if (sentInformationMessage) {
+    // New information message - move the status check message below it
+    if (lastEntry?.statusMessageId) {
+      await deleteStatusCheckMessage(lastEntry.statusMessageId)
+    }
+    setStatusMessageId(await sendStatusCheckMessage(now))
+  } else if (lastEntry?.statusMessageId) {
+    // Nothing new to report - just refresh the time of the last check
+    const stillExists = await updateStatusCheckMessage(
+      lastEntry.statusMessageId,
+      now
+    )
+    if (!stillExists) setStatusMessageId(null)
   }
 }
 
@@ -1035,6 +1134,10 @@ module.exports = {
   sendNotification,
   sendOutagePassedNotification,
   sendOutageCancelledNotification,
+  buildStatusCheckMessage,
+  sendStatusCheckMessage,
+  updateStatusCheckMessage,
+  deleteStatusCheckMessage,
   loadMessageHistory,
   saveMessageHistory,
   run,

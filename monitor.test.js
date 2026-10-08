@@ -19,8 +19,16 @@ const {
   calculateOutageDuration,
   getEmergencyTiming,
   buildOutageMessage,
+  buildStatusCheckMessage,
+  sendStatusCheckMessage,
+  updateStatusCheckMessage,
+  deleteStatusCheckMessage,
 } = require("./monitor.js")
-const { sendTelegramMessage } = require("./lib/telegram.js")
+const {
+  sendTelegramMessage,
+  editTelegramMessage,
+  deleteTelegramMessage,
+} = require("./lib/telegram.js")
 
 // Summer (UTC+3): 2026-06-10 12:00 Kyiv
 const at = (hhmm, day = "2026-06-10") => new Date(`${day}T${hhmm}:00+03:00`)
@@ -446,5 +454,97 @@ describe("sendTelegramMessage", () => {
   it("requires token and chat id", async () => {
     await assert.rejects(sendTelegramMessage("hi", { chatId: "c" }), /token/)
     await assert.rejects(sendTelegramMessage("hi", { token: "t" }), /chat id/)
+  })
+})
+
+describe("status check message", () => {
+  const realFetch = global.fetch
+  let requests
+
+  const stub = (body) => {
+    requests = []
+    global.fetch = async (url, init) => {
+      requests.push({ url, body: JSON.parse(init.body) })
+      return { status: body.ok ? 200 : body.error_code, json: async () => body }
+    }
+  }
+  afterEach(() => {
+    global.fetch = realFetch
+  })
+
+  it("shows the Kyiv check time as HH:MM", () => {
+    assert.strictEqual(
+      buildStatusCheckMessage(at("09:05")),
+      "🔄 <b>Остання перевірка статусу:</b> 09:05"
+    )
+  })
+
+  it("sends silently and returns the message id", async () => {
+    stub({ ok: true, result: { message_id: 42 } })
+    const id = await sendStatusCheckMessage(at("14:30"))
+    assert.strictEqual(id, 42)
+    assert.match(requests[0].url, /\/sendMessage$/)
+    assert.strictEqual(requests[0].body.disable_notification, true)
+    assert.match(requests[0].body.text, /14:30/)
+  })
+
+  it("returns null instead of throwing when sending fails", async () => {
+    stub({ ok: false, error_code: 400, description: "Bad Request: chat not found" })
+    assert.strictEqual(await sendStatusCheckMessage(at("14:30")), null)
+  })
+
+  it("edits the existing message with the new time", async () => {
+    stub({ ok: true, result: {} })
+    assert.strictEqual(await updateStatusCheckMessage(42, at("14:40")), true)
+    assert.match(requests[0].url, /\/editMessageText$/)
+    assert.strictEqual(requests[0].body.message_id, 42)
+    assert.strictEqual(requests[0].body.chat_id, "test_chat_id")
+    assert.match(requests[0].body.text, /14:40/)
+  })
+
+  it("treats 'message is not modified' as success", async () => {
+    stub({
+      ok: false,
+      error_code: 400,
+      description: "Bad Request: message is not modified",
+    })
+    assert.strictEqual(await updateStatusCheckMessage(42, at("14:40")), true)
+  })
+
+  it("reports a deleted message so its id can be forgotten", async () => {
+    stub({
+      ok: false,
+      error_code: 400,
+      description: "Bad Request: message to edit not found",
+    })
+    assert.strictEqual(await updateStatusCheckMessage(42, at("14:40")), false)
+  })
+
+  it("deletes the previous message by id", async () => {
+    stub({ ok: true, result: true })
+    await deleteTelegramMessage(7, { token: "t", chatId: "c" })
+    assert.match(requests[0].url, /\/deleteMessage$/)
+    assert.deepStrictEqual(requests[0].body, { chat_id: "c", message_id: 7 })
+  })
+
+  it("does not throw when the previous message cannot be deleted", async () => {
+    stub({
+      ok: false,
+      error_code: 400,
+      description: "Bad Request: message to delete not found",
+    })
+    await deleteStatusCheckMessage(42)
+    assert.strictEqual(requests.length, 1)
+  })
+
+  it("editTelegramMessage posts message_id and text", async () => {
+    stub({ ok: true, result: {} })
+    await editTelegramMessage(7, "hi", { token: "t", chatId: "c" })
+    assert.deepStrictEqual(requests[0].body, {
+      chat_id: "c",
+      message_id: 7,
+      text: "hi",
+      parse_mode: "HTML",
+    })
   })
 })

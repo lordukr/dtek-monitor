@@ -7,6 +7,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 - Monitors DTEK website for power outages every 10 minutes (Docker on VPS, supercronic)
 - Sends notifications to Telegram when outages are detected
 - Sends separate messages per event: new outage, outage passed, outage cancelled, emergency outage
+- After each event message sends a silent "last status check: HH:MM" message; the previous one is deleted so it is always the last message; runs with no changes edit it (id stored as `statusMessageId` in history)
 - Displays outage reason, start time, and expected restoration time
 - Stores state in artifacts/message-history.json on the host where it runs (VPS bind mount); not tracked or committed to git
 
