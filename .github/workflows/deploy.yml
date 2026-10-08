@@ -8,9 +8,6 @@ on:
       - "docs/**"
       - "scripts/**"
       - "artifacts/**"
-  # PR-и проганяють лише тести; деплой тільки після merge в main
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # Деплої йдуть строго по черзі, без скасування активного
@@ -19,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Тести PR - у test.yml; тут вони ще раз захищають деплой
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -41,7 +39,6 @@ jobs:
 
   deploy:
     needs: test
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
