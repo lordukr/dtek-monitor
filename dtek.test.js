@@ -272,3 +272,110 @@ describe("detectSystemWideEmergency", () => {
     )
   })
 })
+
+describe("buildAjaxBody", () => {
+  test("builds fields in the site's exact order", () => {
+    const body = dtek.buildAjaxBody({
+      city: "м. Бориспіль",
+      street: "вул. Київський Шлях",
+      updateFact: "08.10.2026, 09:06:00",
+    })
+    assert.deepEqual(
+      [...new URLSearchParams(body)],
+      [
+        ["method", "getHomeNum"],
+        ["data[0][name]", "city"],
+        ["data[0][value]", "м. Бориспіль"],
+        ["data[1][name]", "street"],
+        ["data[1][value]", "вул. Київський Шлях"],
+        ["data[2][name]", "updateFact"],
+        ["data[2][value]", "08.10.2026, 09:06:00"],
+      ]
+    )
+  })
+
+  test("round-trips special characters and passes updateFact verbatim", () => {
+    const street = "вул. A&B=C+D"
+    const updateFact = "08.10.2026, 09:06:00 &x=1+2"
+    const params = new URLSearchParams(dtek.buildAjaxBody({ city: "c", street, updateFact }))
+    assert.equal(params.get("data[1][value]"), street)
+    assert.equal(params.get("data[2][value]"), updateFact)
+  })
+})
+
+describe("parseAjaxResponse", () => {
+  const nonJson = (status, text) => `AJAX POST returned non-JSON (HTTP ${status}): ${text}`
+  const dirty = "x\ny\u001b[31mz\u0085w v"
+
+  test("200 with fixture returns the parsed object", () => {
+    const text = fixture("ajax-sample.json")
+    const out = dtek.parseAjaxResponse(200, text)
+    assert.equal(out.result, true)
+    for (const key of Object.keys(JSON.parse(text))) assert.ok(key in out, key)
+  })
+
+  test("201 with result:false is passed through", () => {
+    assert.deepEqual(dtek.parseAjaxResponse(201, '{"result":false}'), { result: false })
+  })
+
+  test("400 excerpt is limited to 500 chars", () => {
+    assert.throws(
+      () => dtek.parseAjaxResponse(400, "a".repeat(500) + "b".repeat(500)),
+      { message: "AJAX POST failed: HTTP 400: " + "a".repeat(500) }
+    )
+  })
+
+  test("500 with valid JSON still throws HTTP failed", () => {
+    assert.throws(() => dtek.parseAjaxResponse(500, '{"result":true}'), (e) =>
+      e.message.startsWith("AJAX POST failed: HTTP 500: ")
+    )
+  })
+
+  test("302 with empty body", () => {
+    assert.throws(() => dtek.parseAjaxResponse(302, ""), { message: "AJAX POST failed: HTTP 302: " })
+  })
+
+  test("200 html is non-JSON", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, "<html>"), { message: nonJson(200, "<html>") })
+  })
+
+  test("200 non-JSON excerpt is limited to 500 chars", () => {
+    assert.throws(
+      () => dtek.parseAjaxResponse(200, "c".repeat(500) + "d".repeat(500)),
+      { message: nonJson(200, "c".repeat(500)) }
+    )
+  })
+
+  test("200 null is non-JSON", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, "null"), { message: nonJson(200, "null") })
+  })
+
+  test("200 array is non-JSON", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, "[]"), { message: nonJson(200, "[]") })
+  })
+
+  test("200 primitives are non-JSON", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, "42"), { message: nonJson(200, "42") })
+    assert.throws(() => dtek.parseAjaxResponse(200, '"s"'), { message: nonJson(200, '"s"') })
+  })
+
+  test("200 empty body is non-JSON", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, ""), { message: nonJson(200, "") })
+  })
+
+  test("HTTP failure excerpt is single-line", () => {
+    assert.throws(() => dtek.parseAjaxResponse(400, dirty), {
+      message: "AJAX POST failed: HTTP 400: x y [31mz w v",
+    })
+  })
+
+  test("non-JSON excerpt is single-line", () => {
+    assert.throws(() => dtek.parseAjaxResponse(200, dirty), {
+      message: "AJAX POST returned non-JSON (HTTP 200): x y [31mz w v",
+    })
+  })
+
+  test("excerpt is not exported", () => {
+    assert.equal(dtek.excerpt, undefined)
+  })
+})
