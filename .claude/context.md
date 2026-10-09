@@ -21,7 +21,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 5. **Docker** - Single container with supercronic scheduler (`crontab`, `Dockerfile`, `docker-compose.yml`)
 6. **Telegram Bot** - Notification delivery
 7. **Artifacts** - State persistence (`artifacts/message-history.json`, git-ignored, lives only where the bot runs; in production the VPS bind mount)
-8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`)
+8. **scripts/** - Ad-hoc debug/preview scripts (hit the live site; not part of `npm test`); `scripts/analyze-popup.js` classifies the #modal-attention popup (critical / warning / normal) via `classifyAttentionText` in `lib/dtek.js`
 9. **Tests** - `monitor.test.js`, `daily-summary.test.js`, `dtek.test.js` (run with `npm test`; required `npm test` check on every PR to `main` via `.github/workflows/test.yml`, merge blocked until it passes)
 
 ### Technology Stack
