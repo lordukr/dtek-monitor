@@ -184,6 +184,73 @@ describe("extractAttentionModalText", () => {
   })
 })
 
+describe("classifyAttentionText", () => {
+  const level = (text) => dtek.classifyAttentionText(text).level
+
+  test("stabilization popup advising to avoid emergencies is normal (09.10.2026)", () => {
+    const r = dtek.classifyAttentionText(
+      dtek.extractAttentionModalText(fixture("modal-stabilization.html"))
+    )
+    assert.equal(r.level, "normal")
+    assert.equal(r.critical, false)
+    assert.ok(r.reasons.some((x) => x.includes("уникнути екстрених")))
+    assert.ok(r.reasons.includes("stabilization (scheduled) outages"))
+  })
+
+  test("emergencies in effect are critical", () => {
+    assert.equal(level("За наказом НЕК Укренерго введені екстрені відключення."), "critical")
+    assert.equal(level("Наразі діють екстрені відключення електроенергії."), "critical")
+    assert.equal(level("Застосовуються екстрені відключення"), "critical")
+  })
+
+  test("avoided, prevented or cancelled emergencies are normal", () => {
+    assert.equal(level("Це допоможе уникнути екстрених відключень."), "normal")
+    assert.equal(level("Щоб не допустити екстрених відключень, економте."), "normal")
+    assert.equal(level("Без екстрених відключень сьогодні."), "normal")
+    assert.equal(level("Екстрені відключення скасовано."), "normal")
+    assert.equal(level("Екстрені відключення електроенергії наразі не застосовуються."), "normal")
+  })
+
+  test("possible emergencies are a warning, not critical", () => {
+    const r = dtek.classifyAttentionText("Можливі екстрені відключення електроенергії.")
+    assert.equal(r.level, "warning")
+    assert.equal(r.critical, false)
+  })
+
+  test("context does not leak across sentences", () => {
+    assert.equal(
+      level("Графіки скасовано. Введені екстрені відключення."),
+      "critical"
+    )
+    assert.equal(
+      level("Діють екстрені відключення. Будь ласка, уникайте пікового споживання."),
+      "critical"
+    )
+  })
+
+  test("any mention in effect wins over avoided ones", () => {
+    assert.equal(
+      level("Діють екстрені відключення. Економте, щоб уникнути екстрених відключень надалі."),
+      "critical"
+    )
+  })
+
+  test("only 'екстрен' can make it critical", () => {
+    assert.equal(level("Зафіксовані аварійні відключення у Фастівському районі."), "normal")
+    assert.equal(level("Перевірка поточних відключень."), "normal")
+  })
+
+  test("missing or empty text is normal", () => {
+    for (const t of [null, undefined, "", "   ", 42]) {
+      assert.deepEqual(dtek.classifyAttentionText(t), {
+        level: "normal",
+        critical: false,
+        reasons: ["no attention popup text"],
+      })
+    }
+  })
+})
+
 describe("detectSystemWideEmergency", () => {
   const wrap = (inner) => `<div id="modal-attention">${inner}</div>`
 
@@ -198,6 +265,10 @@ describe("detectSystemWideEmergency", () => {
   test("is case-insensitive", () => {
     assert.equal(dtek.detectSystemWideEmergency(wrap("ЕКСТРЕНІ")), true)
     assert.equal(dtek.detectSystemWideEmergency(wrap("Екстрених")), true)
+  })
+
+  test("modal-stabilization.html is not an emergency", () => {
+    assert.equal(dtek.detectSystemWideEmergency(fixture("modal-stabilization.html")), false)
   })
 
   test("modal-no-emergency.html is not an emergency", () => {
@@ -623,10 +694,11 @@ describe("module guard", () => {
     assert.deepEqual(loaded, [])
   })
 
-  test("(15) getInfo arity is 1 and exactly 8 exports", () => {
+  test("(15) getInfo arity is 1 and exactly 9 exports", () => {
     assert.equal(dtek.getInfo.length, 1)
     assert.deepEqual(Object.keys(dtek).sort(), [
       "buildAjaxBody",
+      "classifyAttentionText",
       "detectSystemWideEmergency",
       "extractAttentionModalText",
       "extractCsrfToken",
