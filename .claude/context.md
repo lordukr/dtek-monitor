@@ -43,7 +43,7 @@ DTEK Monitor is an automated power outage monitoring system for DTEK (Ukrainian 
 ## Workflow
 1. Script uses impit + tough-cookie (no browser) to fetch DTEK website data
 2. Makes AJAX request with address details to get outage information
-3. Checks if there's an active power outage (emergency = `#modal-attention` popup block containing the stem `екстрен`, case-insensitive)
+3. Checks if there's an active power outage (emergency = emergency wording in DTEK's per-address `sub_type`; other wording such as repair works is a neutral `addressNotice`; the `#modal-attention` popup is log-only)
 4. If outage detected, sends/updates Telegram notification
 5. Saves message history to artifacts/message-history.json (local only, not committed)
 

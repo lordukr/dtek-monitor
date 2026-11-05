@@ -1,5 +1,5 @@
 require("dotenv").config()
-const { getInfo: fetchDtekInfo } = require("./lib/dtek")
+const { getInfo: fetchDtekInfo, isEmergencySubType } = require("./lib/dtek")
 const { sendTelegramMessage } = require("./lib/telegram")
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, CITY, STREET, HOUSE } =
@@ -340,7 +340,10 @@ async function sendDailySummary(info, outageData) {
     if (emergencyOutage) {
       const { sub_type, start_date, end_date } = emergencyOutage
       messageParts.push(
-        "🚨 <b>УВАГА! Аварійне відключення!</b>",
+        // Any filled address data lands here, not only emergencies
+        isEmergencySubType(sub_type)
+          ? "🚨 <b>УВАГА! Аварійне відключення!</b>"
+          : "ℹ️ <b>Повідомлення ДТЕК для вашої адреси</b>",
         "",
         "ℹ️ <b>Причина:</b>",
         (sub_type || "Невідома") + ".",
