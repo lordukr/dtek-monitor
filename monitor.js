@@ -1,7 +1,7 @@
 require("dotenv").config()
 const fs = require("fs")
 const path = require("path")
-const { getInfo } = require("./lib/dtek")
+const { getInfo, isEmergencySubType } = require("./lib/dtek")
 const { sendTelegramMessage, editTelegramMessage } = require("./lib/telegram")
 
 const MESSAGE_HISTORY_FILE = path.resolve("artifacts", `message-history.json`)
@@ -164,14 +164,7 @@ function checkOutage(info, { house = getConfig().HOUSE, now = new Date() } = {})
 
   // Check if this is an emergency outage
   // Emergency indicators: "Екстренні відключення", "Аварійне", "без застосування графіку"
-  const isEmergencyOutageText = !!(
-    sub_type &&
-    (sub_type.includes("Екстренні відключення") ||
-      sub_type.includes("екстренн") ||
-      sub_type.includes("Аварійне") ||
-      sub_type.includes("аварійн") ||
-      sub_type.includes("без застосування графіку"))
-  )
+  const isEmergencyOutageText = isEmergencySubType(sub_type)
 
   // Check if this is a scheduled/stabilization outage (not emergency)
   // "Стабілізаційне відключення (Згідно графіку..." = scheduled
@@ -186,22 +179,24 @@ function checkOutage(info, { house = getConfig().HOUSE, now = new Date() } = {})
   )
 
   let hasEmergencyOutage
+  let addressNotice = null
   if (isEmergencyOutageText) {
     hasEmergencyOutage = true
   } else if (isScheduledOutageText) {
     hasEmergencyOutage = false
   } else if (sub_type) {
-    // Unrecognized sub_type wording: only treat as emergency if there is a
-    // concrete outage window, and warn so wording changes get noticed
+    // Other wording (e.g. "Аварійні ремонтні роботи") is not an emergency. With
+    // a concrete window it is shown as a neutral notice; warn so wording changes
+    // get noticed
     console.warn(`⚠️ Unrecognized sub_type: "${sub_type}"`)
-    hasEmergencyOutage = !!(start_date || end_date)
+    hasEmergencyOutage = false
+    if (start_date || end_date) {
+      addressNotice = { sub_type, start_date, end_date }
+    }
   } else {
     // No sub_type text: emergency if other fields are populated
     hasEmergencyOutage = !!(start_date || end_date || type)
   }
-
-  // Check for system-wide emergency from popup
-  const hasSystemWideEmergency = info.hasSystemWideEmergency || false
 
   let emergencyOutage = null
   if (hasEmergencyOutage) {
@@ -212,16 +207,10 @@ function checkOutage(info, { house = getConfig().HOUSE, now = new Date() } = {})
       end_date,
       type,
     }
-  } else if (hasSystemWideEmergency) {
-    console.log("🚨 System-wide emergency detected (from popup)!")
-    // Create a generic emergency outage object for system-wide emergencies
-    emergencyOutage = {
-      sub_type: "Екстренні відключення електроенергії (системне повідомлення)",
-      start_date: "",
-      end_date: "Невідомо",
-      type: "system-wide",
-      isSystemWide: true,
-    }
+  } else if (info.hasSystemWideEmergency) {
+    // The popup is about the whole region; only the address data says what
+    // applies to this house, and it reports no emergency
+    console.log("ℹ️ Popup reports an emergency, address data does not - not an emergency here")
   } else if (isScheduledOutageText) {
     console.log("📅 Scheduled outage in emergency field (will use schedule data)")
   }
@@ -232,7 +221,8 @@ function checkOutage(info, { house = getConfig().HOUSE, now = new Date() } = {})
     nextScheduledOutage = findNextScheduledOutage(info, sub_type_reason, { now })
   }
 
-  const isOutageDetected = emergencyOutage !== null || nextScheduledOutage !== null
+  const isOutageDetected =
+    emergencyOutage !== null || nextScheduledOutage !== null || addressNotice !== null
 
   isOutageDetected
     ? console.log("🚨 Power outage detected!")
@@ -241,6 +231,7 @@ function checkOutage(info, { house = getConfig().HOUSE, now = new Date() } = {})
   return {
     isOutageDetected,
     emergencyOutage,
+    addressNotice,
     nextScheduledOutage,
   }
 }
@@ -460,7 +451,7 @@ function saveMessageHistory(entry, outageData = null) {
 }
 
 function createMessageHash(outageData) {
-  const { emergencyOutage, nextScheduledOutage } = outageData
+  const { emergencyOutage, addressNotice, nextScheduledOutage } = outageData
 
   // Create a compact hash representing only the critical timing information
   // This ensures we don't send duplicates for the same time ranges
@@ -485,6 +476,10 @@ function createMessageHash(outageData) {
     if (nextOutage) {
       parts.push(`N:${nextOutage.timeRange}`)
     }
+  }
+
+  if (!emergencyOutage && addressNotice) {
+    parts.push(`A:${addressNotice.start_date || ""}|${addressNotice.end_date || ""}`)
   }
 
   return parts.join("|")
@@ -663,6 +658,13 @@ function detectOutageCancelled(
 function isAnnouncedOutageStart(currentOutageData, lastEntry) {
   const previous = lastEntry?.outageData
   if (previous?.emergencyOutage || currentOutageData.emergencyOutage) return false
+  // A changed DTEK notice is news on its own
+  if (
+    (previous?.addressNotice?.end_date || "") !== (currentOutageData.addressNotice?.end_date || "") ||
+    (previous?.addressNotice?.start_date || "") !== (currentOutageData.addressNotice?.start_date || "")
+  ) {
+    return false
+  }
 
   const was = previous?.nextScheduledOutage
   const is = currentOutageData.nextScheduledOutage
@@ -875,8 +877,19 @@ async function sendOutagePassedNotification(info, passedOutageInfo) {
   return { success: data.ok, message }
 }
 
+function buildNoticeEndedMessage(info, notice, now = new Date()) {
+  const messageParts = [
+    "✅ <b>ДТЕК зняв повідомлення для вашої адреси</b>",
+    "",
+    "ℹ️ <b>Тип:</b>",
+    notice.sub_type || "Невідомо",
+  ]
+  appendMetadata(messageParts, info, formatKyivTimestamp(now))
+  return messageParts.join("\n")
+}
+
 function buildOutageMessage(info, outageData, now = new Date()) {
-  const { emergencyOutage, nextScheduledOutage } = outageData
+  const { emergencyOutage, addressNotice, nextScheduledOutage } = outageData
   const updateNotificationTimestamp = formatKyivTimestamp(now)
 
   const messageParts = []
@@ -912,6 +925,26 @@ function buildOutageMessage(info, outageData, now = new Date()) {
     }
 
     messageParts.push("", "━━━━━━━━━━━━━━━━━━━━", "")
+  }
+
+  // Not an emergency, e.g. "Аварійні ремонтні роботи"
+  if (!emergencyOutage && addressNotice) {
+    const { sub_type, start_date, end_date } = addressNotice
+    messageParts.push(
+      "ℹ️ <b>Повідомлення ДТЕК для вашої адреси</b>",
+      "",
+      "ℹ️ <b>Тип:</b>",
+      sub_type,
+      "",
+      "🔴 <b>Початок:</b>",
+      start_date || "Невідомо",
+      "",
+      "🟢 <b>Завершення:</b>",
+      end_date || "Невідомо"
+    )
+    if (nextScheduledOutage) {
+      messageParts.push("", "━━━━━━━━━━━━━━━━━━━━", "")
+    }
   }
 
   // Add scheduled outage section
@@ -1060,6 +1093,26 @@ async function run() {
       },
       outageData
     )
+  } else if (
+    lastEntry?.outageData?.addressNotice &&
+    !outageData.isOutageDetected
+  ) {
+    // The notice is gone and nothing replaced it: the latest message would stay stale
+    const text = buildNoticeEndedMessage(info, lastEntry.outageData.addressNotice, now)
+    console.log("🌀 Sending notice-ended notification...")
+    const { message } = await sendInformationMessage(text, now)
+    sentInformationMessage = true
+
+    saveMessageHistory(
+      {
+        timestamp: new Date().toISOString(),
+        hash: createMessageHash(outageData),
+        sent: true,
+        type: "notice-ended",
+        ...(message ? { message } : {}),
+      },
+      outageData
+    )
   } else if (isAnnouncedOutageStart(outageData, lastEntry)) {
     console.log("⚡️ Announced outage has started - updating the latest message")
 
@@ -1144,6 +1197,7 @@ module.exports = {
   isAnnouncedOutageStart,
   calculateOutageDuration,
   buildOutageMessage,
+  buildNoticeEndedMessage,
   buildPassedMessage,
   buildCancelledMessage,
   sendNotification,

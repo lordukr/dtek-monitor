@@ -126,14 +126,16 @@ describe("checkOutage emergency detection", () => {
     assert.strictEqual(r.isOutageDetected, false)
   })
 
-  it("unknown sub_type with a date window is emergency and warns", () => {
+  it("unknown sub_type with a date window is a notice, not an emergency, and warns", () => {
     const warnings = []
     console.warn = (...a) => warnings.push(a.join(" "))
     const r = checkOutage(
       makeInfo({}, { sub_type: "Нова формулювання", start_date: "10:00 10.06.2026" }),
       { house: "1", now }
     )
-    assert.ok(r.emergencyOutage)
+    assert.strictEqual(r.emergencyOutage, null)
+    assert.strictEqual(r.addressNotice.sub_type, "Нова формулювання")
+    assert.ok(r.isOutageDetected)
     assert.ok(warnings.some((w) => w.includes("Нова формулювання")))
   })
 
@@ -148,13 +150,64 @@ describe("checkOutage emergency detection", () => {
     assert.strictEqual(warnings.length, 1)
   })
 
-  it("system-wide popup is a fallback", () => {
+  it("repair works are a notice with the normal schedule, not an emergency (04.11.2026)", () => {
+    const r = checkOutage(
+      makeInfo(
+        { 15: "no" },
+        {
+          sub_type: "Аварійні ремонтні роботи",
+          start_date: "21:52 02.11.2026",
+          end_date: "10:10 05.11.2026",
+          type: "2",
+        }
+      ),
+      { house: "1", now }
+    )
+    assert.strictEqual(r.emergencyOutage, null)
+    assert.strictEqual(r.addressNotice.end_date, "10:10 05.11.2026")
+    assert.strictEqual(r.nextScheduledOutage.nextOutage.timeRange, "14:00-15:00")
+    assert.strictEqual(createMessageHash(r), "S:GPV1.2|N:14:00-15:00|A:21:52 02.11.2026|10:10 05.11.2026")
+
+    const text = buildOutageMessage(makeInfo({}), r, now)
+    assert.doesNotMatch(text, /ЕКСТРЕНЕ|АКТИВНЕ/)
+    assert.match(text, /Повідомлення ДТЕК для вашої адреси/)
+    assert.match(text, /Аварійні ремонтні роботи/)
+    assert.match(text, /Планове відключення/)
+  })
+
+  it("popup emergency alone does not make this address an emergency", () => {
     const r = checkOutage(makeInfo({}, {}, { hasSystemWideEmergency: true }), {
       house: "1",
       now,
     })
-    assert.ok(r.emergencyOutage.isSystemWide)
-    assert.ok(r.isOutageDetected)
+    assert.strictEqual(r.emergencyOutage, null)
+    assert.strictEqual(r.addressNotice, null)
+    assert.strictEqual(r.isOutageDetected, false)
+  })
+
+  it("popup emergency does not hide or change the normal schedule", () => {
+    const r = checkOutage(makeInfo({ 15: "no" }, {}, { hasSystemWideEmergency: true }), {
+      house: "1",
+      now,
+    })
+    assert.strictEqual(r.emergencyOutage, null)
+    assert.strictEqual(createMessageHash(r), "S:GPV1.2|N:14:00-15:00")
+  })
+
+  it("address data with emergency wording is still an emergency", () => {
+    const r = checkOutage(
+      makeInfo(
+        {},
+        {
+          sub_type: "Екстренні відключення (Аварійне без застосування графіку погодинних відключень)",
+          start_date: "07:36 09.10.2026",
+          end_date: "15:25 09.10.2026",
+        }
+      ),
+      { house: "1", now }
+    )
+    assert.ok(r.emergencyOutage)
+    assert.strictEqual(r.addressNotice, null)
   })
 
   it("reads HOUSE lazily from env by default", () => {

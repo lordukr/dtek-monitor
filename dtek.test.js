@@ -251,6 +251,26 @@ describe("classifyAttentionText", () => {
   })
 })
 
+describe("isEmergencySubType", () => {
+  test("emergency wording", () => {
+    assert.equal(
+      dtek.isEmergencySubType("Екстренні відключення (Аварійне без застосування графіку погодинних відключень)"),
+      true
+    )
+    assert.equal(dtek.isEmergencySubType("Аварійне"), true)
+  })
+
+  test("repair works and other wording are not emergencies", () => {
+    assert.equal(dtek.isEmergencySubType("Аварійні ремонтні роботи"), false)
+    assert.equal(dtek.isEmergencySubType("Планові ремонтні роботи"), false)
+    assert.equal(dtek.isEmergencySubType("Стабілізаційне відключення (Згідно графіку)"), false)
+  })
+
+  test("empty and non-string input is false", () => {
+    for (const v of ["", null, undefined, 42]) assert.equal(dtek.isEmergencySubType(v), false)
+  })
+})
+
 describe("detectSystemWideEmergency", () => {
   const wrap = (inner) => `<div id="modal-attention">${inner}</div>`
 
@@ -694,7 +714,7 @@ describe("module guard", () => {
     assert.deepEqual(loaded, [])
   })
 
-  test("(15) getInfo arity is 1 and exactly 9 exports", () => {
+  test("(15) getInfo arity is 1 and exactly 10 exports", () => {
     assert.equal(dtek.getInfo.length, 1)
     assert.deepEqual(Object.keys(dtek).sort(), [
       "buildAjaxBody",
@@ -704,6 +724,7 @@ describe("module guard", () => {
       "extractCsrfToken",
       "fetchInfo",
       "getInfo",
+      "isEmergencySubType",
       "isIncapsulaChallenge",
       "parseAjaxResponse",
     ])
